@@ -91,6 +91,21 @@ honestly routed to a generic, disclosed proxy instead of an invented
 table — the fixture's `mapping_coverage_report.json` shows exactly
 which activities got an explicit mapping vs. the fallback on each run.
 
+Running the constructor end-to-end against the real fixture (300 PO
+items) recovers **15+ distinct activity types** (goods receipt, invoice
+receipt, service entry sheets, invoice clearing, item creation, several
+SRM sourcing steps, and more) from multiple raw sources — not the
+three-activity, header-dates-only log naive attempts produce. It also
+surfaces real, disclosed limits rather than guessing past them: events
+on multi-item POs that CDHDR/CDPOS's proxy tables can't attribute to
+one item are excluded from item-level cases (and correctly rolled up
+at order level instead); `Clear Vendor Invoice` events, which BSEG
+genuinely cannot tie back to a PO without decoding `BKPF.AWKEY`, are
+related only to the `Vendor` object in the OCEL output, not fabricated
+onto a `PurchaseOrder`. The output validates cleanly against this
+project's own `check_event_log_spec` — the constructor holds itself to
+the same structural bar the critic agent will use later.
+
 ## Architecture
 
 | # | Component | Status |
@@ -98,7 +113,7 @@ which activities got an explicit mapping vs. the fallback on each run.
 | 1 | Grounded knowledge base (`src/sap_ocpm/kb/`) | ✅ done — 30 tables, loader with fail-fast join validation, 10 passing unit tests |
 | 2 | Planner agent — decomposes use case → process scope, human review gate | ⬜ not started |
 | 3 | Deterministic tools — `search_tables`, `get_table_schema`, `find_join_path`, `validate_sql`, `check_event_log_spec` | ✅ done — 5 tools, 20 passing unit tests |
-| 4 | Event log constructor — activity derivation, case granularity, timestamp resolution, gap flagging, OCEL writer | ⬜ not started (data prep for it is done — see below) |
+| 4 | Event log constructor — activity derivation, case granularity, timestamp resolution, gap flagging, OCEL writer | ✅ done — validated end-to-end against the real BPI2019 fixture, 12 new unit tests |
 | 5 | Critic pass — validates the plan against the KB, flags gaps with confidence | ⬜ not started |
 | 6 | Eval harness — 15–25 expert-labeled use cases, table recall / field precision / join validity / hallucination rate | ⬜ not started |
 | 7 | Observability — per-run tool-call trace, token/cost accounting | ⬜ not started |
@@ -120,7 +135,7 @@ src/sap_ocpm/
   kb/            # grounded knowledge base (done)
   tools/         # deterministic tools (done)
   agents/        # planner + critic (Claude Agent SDK)
-  constructor/   # event log construction domain layer
+  constructor/   # event log construction domain layer (done)
   dataprep/      # BPI2019 -> synthetic-but-grounded raw SAP tables (done)
   observability/ # trace + cost accounting
   interfaces/    # MCP server + CLI

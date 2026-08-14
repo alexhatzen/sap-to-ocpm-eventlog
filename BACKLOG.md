@@ -90,21 +90,51 @@ output — see `README.md` once written, or the original planning conversation).
       SRM proxy, the generic fallback, EKKO dedup across items on the
       same PO, and ground-truth-log fidelity.
 
-### 5. Event log constructor (`src/sap_ocpm/constructor/`)
-- [ ] `activity_derivation.py` — merge header dates, item events,
-      CDHDR/CDPOS, JEST/JCDS into one activity stream.
-- [ ] `case_granularity.py` — order-level vs item-level case-ID
-      construction, explicit tradeoffs.
-- [ ] `timestamp_resolution.py` — documented tie-break/ordering rules for
-      date-only vs date+time fields (every table's `timestamp_fields`
-      entry in the KB already flags which is which — use it).
-- [ ] `gap_flagging.py` — flag requested-but-unavailable data instead of
-      fabricating it.
-- [ ] `ocel_writer.py` — emit OCEL 2.0 JSON (PurchaseOrder,
-      PurchaseOrderItem, Vendor, Material, Invoice object types +
-      relations); optional flat-XES export.
-- [ ] Validate by hand against the known BPI2019 process shape once the
-      fixture exists.
+### 5. Event log constructor (`src/sap_ocpm/constructor/`) — ✅ done
+- [x] `activity_derivation.py` — reads the shredded raw tables and
+      derives `ActivityEvent`s from EKBE (GR/service-entry via VGABE=1,
+      discriminated by whether BELNR resolves to a real MKPF row vs.
+      not; invoice receipt via VGABE=2), RBKP joined to RSEG (the real
+      declared KB join) for invoice creation, and CDHDR/CDPOS for item
+      creation + the SRM/unmapped-activity proxies. CDHDR's OBJECTID is
+      decoded via the padding rule documented in the KB's own gotcha
+      (build a padded->real EBELN map from known EKPO rows), not guessed.
+- [x] `case_granularity.py` — item-level (`EBELN_EBELP`, default,
+      matches BPI2019's native case notion) and order-level (`EBELN`)
+      case construction. Header-only events (ambiguous CDHDR/CDPOS
+      attribution on multi-item POs) are excluded from item-level cases
+      and rolled up correctly at order level — verified this actually
+      round-trips in the tests, not just documented as an intention.
+- [x] `timestamp_resolution.py` — `resolve_timestamp()` combines SAP
+      DATS+TIMS into ISO 8601, returns `None` (never a fabricated
+      midnight) when unparseable; `sort_key()` gives a documented,
+      deterministic tie-break (source-table priority, then insertion
+      order) for events sharing an exact timestamp.
+- [x] `gap_flagging.py` — flags undated events and the fixture's
+      placeholder MENGE (BPI2019 has no item-level quantity), layered on
+      top of the gaps `activity_derivation` already surfaces
+      (unresolved RSEG join, undecodable CDHDR OBJECTID, ambiguous
+      multi-item attribution, BSEG's real AWKEY limitation).
+- [x] `ocel_writer.py` — `build_ocel()` emits an OCEL-2.0-shaped
+      `EventLogSpec` (PurchaseOrder/PurchaseOrderItem/Vendor object
+      types); vendor-only events (BSEG clearing) relate only to the
+      `Vendor` object rather than a fabricated PO link. Validates its
+      own output through `check_event_log_spec` before returning — same
+      bar the critic agent will apply later, not a looser one.
+- [x] Validated end-to-end against the real 300-case BPI2019 fixture:
+      6,964 events derived, 15+ distinct activity types recovered
+      (vs. a naive header-dates-only 3-activity log), item-level case
+      count matches EKPO row count exactly (300), order-level matches
+      EKKO (198), OCEL output validates with zero structural errors.
+      Found and correctly preserved (not "fixed") a real BPI2019 data
+      quality quirk — a duplicate "Vendor creates debit memo" event
+      timestamped 2001 instead of 2018 — confirming the pipeline isn't
+      silently cleaning the ground truth it's supposed to be checked
+      against later.
+- [x] 12 new unit tests (52 total): timestamp edge cases, single- vs
+      multi-item attribution, the BSEG/AWKEY limitation, undated-event
+      flagging, OCEL vendor-only relations, and a full run against the
+      real fixture.
 
 ### 6. Planner agent (`src/sap_ocpm/agents/planner.py`)
 - [ ] Claude Agent SDK agent, tools limited to `search_tables` +
