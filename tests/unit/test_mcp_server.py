@@ -7,6 +7,7 @@ import asyncio
 import json
 from pathlib import Path
 
+from sap_ocpm.interfaces import mcp_server
 from sap_ocpm.interfaces.mcp_server import server
 
 FIXTURE_DIR = Path(__file__).parents[2] / "data" / "fixtures" / "bpi2019_sample"
@@ -65,10 +66,56 @@ def test_build_event_log_against_real_fixture():
     assert "PurchaseOrderItem" in data["object_types"]
 
 
-def test_build_event_log_writes_output_file(tmp_path):
+def test_build_event_log_writes_output_file(tmp_path, monkeypatch):
+    # output_path is confined to ALLOWED_ROOT (see hardening tests below) —
+    # monkeypatch it to tmp_path so this test can write there without
+    # littering the real repo tree, using a minimal synthetic fixture
+    # instead of the real one (also outside the real ALLOWED_ROOT otherwise).
+    monkeypatch.setattr(mcp_server, "ALLOWED_ROOT", tmp_path)
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    (fixture_dir / "ekpo.csv").write_text("EBELN,EBELP\nPO1,00001\n")
     out = tmp_path / "log.json"
-    data = _call("build_event_log", {"fixture_dir": str(FIXTURE_DIR), "granularity": "order", "output_path": str(out)})
+
+    data = _call(
+        "build_event_log",
+        {"fixture_dir": str(fixture_dir), "granularity": "order", "output_path": str(out)},
+    )
+    assert data.get("error") is None, data.get("error")
     assert data["output_written_to"] == str(out)
     assert out.exists()
     written = json.loads(out.read_text())
     assert "PurchaseOrderItem" not in written["object_types"]  # order granularity
+
+
+# --- path-restriction hardening -----------------------------------------
+
+def test_build_event_log_rejects_fixture_dir_outside_allowed_root(tmp_path):
+    outside = tmp_path / "not_in_repo"
+    outside.mkdir()
+    data = _call("build_event_log", {"fixture_dir": str(outside)})
+    assert "error" in data
+    assert "outside the allowed directory" in data["error"]
+
+
+def test_build_event_log_rejects_output_path_outside_allowed_root(tmp_path):
+    outside_output = tmp_path / "evil.json"
+    data = _call(
+        "build_event_log",
+        {"fixture_dir": str(FIXTURE_DIR), "granularity": "order", "output_path": str(outside_output)},
+    )
+    assert "error" in data
+    assert "outside the allowed directory" in data["error"]
+    assert not outside_output.exists()  # never written
+
+
+def test_build_event_log_rejects_traversal_via_relative_path():
+    data = _call("build_event_log", {"fixture_dir": "../../../../../../etc"})
+    assert "error" in data
+
+
+def test_resolve_within_allowed_root_accepts_relative_path_inside_root():
+    resolved = mcp_server._resolve_within_allowed_root(
+        "data/fixtures/bpi2019_sample", purpose="fixture_dir"
+    )
+    assert resolved == FIXTURE_DIR.resolve()

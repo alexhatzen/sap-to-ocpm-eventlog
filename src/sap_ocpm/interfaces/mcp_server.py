@@ -30,6 +30,32 @@ from sap_ocpm.tools import (
     validate_sql,
 )
 
+# build_event_log's fixture_dir/output_path are free-text paths supplied by
+# whatever's driving the MCP client (potentially an LLM acting on untrusted
+# content, e.g. prompt injection from something else in the conversation).
+# They're deliberately confined to this directory tree — no read or write
+# outside it, no matter what path is requested — rather than trusting the
+# caller. See README's MCP security note for the reasoning.
+ALLOWED_ROOT = Path(__file__).resolve().parents[3]
+
+
+class PathNotAllowedError(ValueError):
+    """Raised when a caller-supplied path resolves outside ALLOWED_ROOT."""
+
+
+def _resolve_within_allowed_root(path_str: str, *, purpose: str) -> Path:
+    candidate = Path(path_str)
+    resolved = candidate.resolve() if candidate.is_absolute() else (ALLOWED_ROOT / candidate).resolve()
+    try:
+        resolved.relative_to(ALLOWED_ROOT)
+    except ValueError:
+        raise PathNotAllowedError(
+            f"{purpose} {path_str!r} resolves to {resolved}, which is outside the "
+            f"allowed directory ({ALLOWED_ROOT}). Refusing rather than reading/writing "
+            f"outside the project tree — use a path inside the project instead."
+        ) from None
+    return resolved
+
 server = FastMCP(
     "sap-ocpm",
     instructions=(
@@ -85,8 +111,20 @@ def build_event_log(fixture_dir: str, granularity: str = "item", output_path: st
     summary: event/object counts, structural validation result, and every gap
     the constructor flagged rather than silently working around. granularity is
     "item" (default) or "order". If output_path is given, also writes the OCEL
-    JSON there."""
-    tables = load_tables_from_fixture(Path(fixture_dir))
+    JSON there.
+
+    Both paths are confined to the project directory tree (ALLOWED_ROOT) —
+    a path resolving outside it is refused with a clear error rather than
+    read from or written to."""
+    try:
+        resolved_fixture_dir = _resolve_within_allowed_root(fixture_dir, purpose="fixture_dir")
+        resolved_output_path = (
+            _resolve_within_allowed_root(output_path, purpose="output_path") if output_path else None
+        )
+    except PathNotAllowedError as exc:
+        return {"error": str(exc)}
+
+    tables = load_tables_from_fixture(resolved_fixture_dir)
     events, gaps = derive_activities(tables)
     gaps += flag_additional_gaps(events)
 
@@ -94,8 +132,8 @@ def build_event_log(fixture_dir: str, granularity: str = "item", output_path: st
     spec = build_ocel(events, granularity=granularity)
     validation = validate_ocel(spec)
 
-    if output_path:
-        Path(output_path).write_text(json.dumps(spec.model_dump(), indent=2))
+    if resolved_output_path:
+        resolved_output_path.write_text(json.dumps(spec.model_dump(), indent=2))
 
     return {
         "granularity": granularity,
@@ -107,7 +145,7 @@ def build_event_log(fixture_dir: str, granularity: str = "item", output_path: st
         "event_types": spec.event_types,
         "ocel_validation": validation.model_dump(),
         "gaps": [{"category": g.category, "description": g.description, "ebeln": g.ebeln} for g in gaps],
-        "output_written_to": output_path or None,
+        "output_written_to": str(resolved_output_path) if resolved_output_path else None,
     }
 
 

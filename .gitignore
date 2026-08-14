@@ -9,3 +9,5 @@ htmlcov/
 data/raw/
 .env
 *.log
+event_log.json
+plan.json

@@ -207,6 +207,32 @@ not.** `eval/run_eval.py` runs in **cassette mode by default** — cached
 planner outputs in `eval/cassettes/`, no API key or live call needed —
 and only calls the live planner with `--live`.
 
+### How to read the results table
+
+`sap-ocpm eval` / `eval/RESULTS.md` prints one row per case:
+
+| Column | What it measures | 1.0 / 0.0 means | Less-than-perfect means |
+|---|---|---|---|
+| **table recall** | Of the tables the case's `expected_tables` names, what fraction did the planner actually reference? | 1.0 = nothing missing | The planner missed a table a consultant would have picked — check `missing_tables` on the underlying `EvalMetrics` object. |
+| **table precision** | Of the tables the planner referenced, what fraction were actually expected? | 1.0 = no noise | The planner pulled in tables beyond what the case needs — check `extra_tables`. Not automatically bad (could be a legitimately broader plan), but worth a look. |
+| **hallucinated table rate** | Of the tables referenced, what fraction don't exist in the KB at all? | **Must always be 0.0.** CI hard-fails the build otherwise. | Any nonzero value here is the failure this whole project exists to prevent — a fabricated table name that sounds plausible. Treat as a blocking bug, not a tuning issue. |
+| **join validity rate** | Of the table pairs the plan's activities imply need joining, what fraction have a real declared path in the KB (`find_join_path`)? | 1.0 = every implied join is real | **Not automatically bad below 1.0.** A pair can legitimately fail because one side uses a polymorphic key (`CDHDR`/`JEST`/`JCDS`/`NAST`) that this KB deliberately does *not* model as a clean join — see `invalid_join_pairs` to see which pairs failed and why before assuming something's wrong. |
+
+**Worked example:** a case scoring `1.000 / 1.000 / 0.000 / 0.692` means
+the planner found every expected table with zero noise and zero
+hallucination (the important ones), but 4 of 13 implied joins in its
+own activity list had no declared path — and if those 4 all involve
+`CDHDR`/`CDPOS`, that's the correct, deliberate behavior (see
+"Scope: ~30 tables" above), not a bug to chase. Always check
+`invalid_join_pairs` before treating a sub-1.0 join validity rate as a
+problem — a plan that scores 0.5 because it needed a real, missing join
+is a genuine finding; one that scores 0.692 because of
+CDHDR/CDPOS/polymorphic-key tables is the system working as designed.
+
+The **aggregate** line underneath rolls all of the above up across
+every non-draft case in the run — that's the number to watch over time
+as real eval cases get added, not any single case's row.
+
 Honesty note on scope: `ProcessPlan` tracks table-level selections, not
 field-level ones, so this reports **table precision**, not the
 "field precision" the original design named — extending the plan
@@ -274,8 +300,23 @@ tests/           # unit + integration tests
 
 ### 1. Set up the environment
 
+**Every command below assumes your shell's current directory is the repo
+root** (the directory this README is in — the one containing
+`pyproject.toml`). If you see a "path not found" error on any step,
+that's almost always the cause: check `pwd` and re-`cd` into the repo
+root before continuing, and re-activate the venv (`source
+.venv/bin/activate`) if you opened a new terminal.
+
+If you don't already have the repo locally:
+
 ```bash
-git clone <this repo> && cd sap-to-ocpm-eventlog
+git clone <URL of this repo> sap-to-ocpm-eventlog
+cd sap-to-ocpm-eventlog
+```
+
+Then, from the repo root:
+
+```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .          # editable install — this is what puts the `sap-ocpm` command on PATH
 pip install pytest        # only needed to run the test suite, not a runtime dependency
@@ -346,10 +387,147 @@ sap-ocpm mcp
 # equivalently: python3 -m sap_ocpm.interfaces.mcp_server
 ```
 
-Point an MCP client at this command over stdio. It exposes
+Any MCP client can point at this command over stdio. It exposes
 `search_tables_tool`, `get_table_schema_tool`, `find_join_path_tool`,
 `validate_sql_tool`, `check_event_log_spec_tool`, and
 `build_event_log` (the full constructor pipeline as one call).
+
+#### Adding it to Claude Desktop
+
+Claude Desktop launches MCP servers from a config file it reads at
+startup — it does **not** inherit your shell's `PATH` or an activated
+venv, so the config has to point at an absolute path.
+
+1. **Find (or create) the config file:**
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - Linux: `~/.config/Claude/claude_desktop_config.json`
+
+2. **Get the absolute path to your venv's `sap-ocpm` binary** (this is
+   specific to where you set up the venv in step 1 above):
+
+   ```bash
+   # from the repo root, with the venv active
+   which sap-ocpm
+   ```
+
+3. **Add an `mcpServers` entry.** If the file already has content
+   (other servers, app preferences, etc.), add the `"sap-ocpm"` key
+   inside the existing `"mcpServers"` object rather than replacing the
+   file — merge it in, don't overwrite:
+
+   ```json
+   {
+     "mcpServers": {
+       "sap-ocpm": {
+         "command": "/absolute/path/from/step/2/sap-ocpm",
+         "args": ["mcp"]
+       }
+     }
+   }
+   ```
+
+   Using the venv's own `sap-ocpm` binary by full path (rather than
+   `python3 -m sap_ocpm.interfaces.mcp_server` with a separate
+   `PYTHONPATH`) is the simplest option — because the project was
+   installed with `pip install -e .`, that one binary resolves
+   correctly regardless of what directory Claude Desktop launches it
+   from.
+
+4. **Fully quit Claude Desktop and relaunch it** — closing the window
+   isn't enough, the app only reads this file on startup. On macOS,
+   quit from the menu bar / dock (right-click → Quit), not just ⌘W.
+
+5. **Verify it connected:** open a new chat and check the
+   tools/connectors icon (🔨, or Settings → Developer, naming varies by
+   version) — `sap-ocpm` should be listed with its 6 tools. Try asking
+   something like *"using the sap-ocpm tools, look up the schema for
+   table EKKO"* and confirm it actually calls the tool rather than
+   answering from memory.
+
+**If the config file doesn't look like `{"mcpServers": {...}}`** (e.g.
+it has keys like `preferences`, `coworkUserFilesPath`, or other
+app-internal state) — that's a sign you're on an app build/version
+whose in-app Settings may not expose a "custom local connector" UI for
+this yet. Adding the `mcpServers` key to the file is still worth trying
+(many versions read it regardless of whether there's a UI for it), but
+if nothing shows up after a full restart, the CLI (`sap-ocpm build`,
+`sap-ocpm plan`, etc.) remains the reliable way to use this project.
+
+**Troubleshooting:**
+- **Nothing shows up after restart** — check `~/Library/Logs/Claude/mcp*.log`
+  (macOS) for a connection error; the most common cause is a typo'd
+  absolute path or invalid JSON (trailing comma, mismatched braces).
+- **"command not found" in the logs** — the path in the config isn't
+  actually where your venv's `sap-ocpm` lives; re-run `which sap-ocpm`
+  with the venv active and double-check.
+- **It connects but tool calls fail** — make sure you ran
+  `pip install -e .` (not just `pip install -r requirements.txt` or
+  similar) in that venv; the console script and the package both need
+  the editable install.
+
+**Security note:** `build_event_log` takes free-text `fixture_dir` and
+`output_path` parameters. **These are hardened**
+(`interfaces/mcp_server.py`'s `ALLOWED_ROOT` / `_resolve_within_allowed_root`)
+— both are resolved and checked against the project's own directory
+tree, and a path resolving outside it (absolute, like `/etc`, or via
+`../` traversal) is refused with a clear error instead of being read
+from or written to. Verified live: `fixture_dir="/etc"` and
+`output_path="/tmp/pwned.json"` are both rejected, and no file gets
+written. This only applies to the MCP-exposed tool — the CLI's `build`
+command takes a path directly from you at your own terminal and isn't
+restricted, same trust boundary as any other local CLI tool.
+
+#### Using it once connected
+
+Once `sap-ocpm` shows up in Claude Desktop's tools/connectors list, you
+use it by just **asking Claude things in plain language** — you don't
+call the tools directly, Claude decides when to. Here's what each tool
+is for and an example prompt that should trigger it:
+
+| Tool | What it does | Example prompt |
+|---|---|---|
+| `search_tables_tool` | Keyword/module search over the 30-table KB | *"What SAP tables would I need to analyze goods receipt timing?"* |
+| `get_table_schema_tool` | Full schema for one named table | *"What fields does EKBE have, and what are its gotchas?"* |
+| `find_join_path_tool` | Declared join path between two tables | *"How would I join EKPO to RBKP?"* |
+| `validate_sql_tool` | Structural SQL syntax check | *"Is this SQL valid: SELECT EBELN FROM EKKO WHERE BUKRS = '1000'"* |
+| `check_event_log_spec_tool` | Validates an OCEL-shaped JSON spec | *"Check whether this OCEL spec is structurally valid: {...}"* |
+| `build_event_log` | Runs the full constructor pipeline end-to-end | *"Build an item-level event log from data/fixtures/bpi2019_sample and save it to event_log.json"* |
+
+**A realistic end-to-end example**, once connected:
+
+> *"Using the sap-ocpm knowledge base, what tables would I need to
+> analyze 3-way-match purchase order processing, and how do they join
+> together?"*
+
+Claude should call `search_tables_tool`/`get_table_schema_tool` a few
+times, then `find_join_path_tool` to confirm the joins, and answer
+using only what those calls actually returned — the same
+grounded-retrieval behavior verified live during development (see
+"Live-verified" note under Architecture above). If Claude answers
+instantly with confident-sounding table names and *no* tool-call
+indicator appeared in the chat, it didn't use the server — see
+"Verify it connected" above.
+
+**Trying `build_event_log` specifically:**
+
+> *"Use the sap-ocpm build_event_log tool on data/fixtures/bpi2019_sample
+> with item granularity, and tell me what gaps it found."*
+
+Note the path has to be relative to the project root (or an absolute
+path inside it) — `data/fixtures/bpi2019_sample`, not `~/Desktop/...` —
+because of the path hardening described just above; ask about a path
+outside the project and you should get back a clear "outside the
+allowed directory" error rather than either silently failing or
+reading somewhere unexpected.
+
+**A minimal sanity check that doesn't depend on any AI judgment call:**
+ask Claude to call `get_table_schema_tool` for a table you know doesn't
+exist, e.g. *"look up the schema for EKKO_ITEM"*. A correctly-connected
+server returns `"found": false` — if Claude instead describes a
+plausible-sounding schema for a table that isn't real, something is
+wrong (most likely it answered from memory instead of calling the
+tool; see "Verify it connected" above).
 
 ### 6. (Optional) rebuild the BPI2019 fixture from scratch
 
@@ -360,6 +538,18 @@ PYTHONPATH=src python3 -m sap_ocpm.dataprep.build_fixture 300
 Streams live from 4TU.ResearchData and stops as soon as 300 traces are
 collected — never downloads the full ~729MB file. Overwrites
 `data/fixtures/bpi2019_sample/`.
+
+### Troubleshooting
+
+- **"path not found" on any command** — almost always means the shell
+  isn't in the repo root. Run `pwd`; it should end in
+  `sap-to-ocpm-eventlog`. Re-`cd` there and re-run.
+- **`sap-ocpm: command not found`** — the venv either isn't activated
+  (`source .venv/bin/activate`) or `pip install -e .` (step 1) wasn't
+  run yet in this venv.
+- **`ModuleNotFoundError` for something in `pyproject.toml`'s
+  dependency list** — same fix, `pip install -e .` from the repo root
+  with the venv active.
 
 ### Where to go next
 

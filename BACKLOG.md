@@ -254,6 +254,19 @@ genuinely still open, in priority order:
 - [x] 7 new offline unit tests for the MCP server, 4 for the CLI.
 - [x] End-to-end demo commands documented in README's "Try it" section
       instead of a separate demo script — the CLI itself *is* the demo.
+- [x] **Security hardening (post-launch):** `build_event_log`'s
+      `fixture_dir`/`output_path` params originally accepted any path —
+      caught during a user security review after wiring this into Claude
+      Desktop. Added `ALLOWED_ROOT` + `_resolve_within_allowed_root()`
+      confining both to the project directory tree; anything resolving
+      outside it (absolute paths, `../` traversal) is refused with a
+      clear error instead of read/written. Live-verified against
+      `/etc` and `/tmp/pwned.json` — both rejected, nothing written.
+      Deliberately scoped to the MCP tool only, not the CLI's `build`
+      command (that's a path the user gives themselves at their own
+      terminal — different trust boundary than a path an MCP client,
+      potentially driven by untrusted conversation content, supplies).
+      4 new tests in `tests/unit/test_mcp_server.py`.
 
 ### 11. README pass — ✅ done
 - [x] Explicit "~30 tables, P2P scope, depth over breadth" statement.

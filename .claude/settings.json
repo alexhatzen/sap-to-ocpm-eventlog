@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git rev-list *)",
+      "Bash(grep -iE \"@[a-z0-9.-]+\\\\.[a-z]{2,}\")"
+    ]
+  }
+}
