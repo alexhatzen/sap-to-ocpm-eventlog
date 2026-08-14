@@ -136,18 +136,49 @@ output — see `README.md` once written, or the original planning conversation).
       flagging, OCEL vendor-only relations, and a full run against the
       real fixture.
 
-### 6. Planner agent (`src/sap_ocpm/agents/planner.py`)
-- [ ] Claude Agent SDK agent, tools limited to `search_tables` +
-      `get_table_schema` (read-only KB retrieval only).
-- [ ] `ProcessPlan` pydantic schema (`agents/schemas.py`).
-- [ ] CLI review-gate: print plan → accept/edit/reject before anything
-      downstream runs.
+### 6. Planner agent (`src/sap_ocpm/agents/planner.py`) — ✅ done
+- [x] `agents/sdk_tools.py` wraps the deterministic tools as Claude Agent
+      SDK in-process MCP tools (`@sdk.tool`), scoped per agent:
+      `PLANNER_TOOLS` = search_tables + get_table_schema only;
+      `CRITIC_TOOLS` = get_table_schema + find_join_path +
+      check_event_log_spec. Confirmed live that the SDK's actual tool
+      name is `mcp__<server>__<tool>` before writing the real agents.
+- [x] `run_planner()`: Claude Agent SDK agent (`claude_agent_sdk.query`),
+      system prompt hard-requires a tool call before naming any table,
+      output parsed as a fenced ```json block into `ProcessPlan` — raises
+      `PlannerError` rather than silently returning a fabricated plan on
+      malformed output.
+- [x] `ProcessPlan`/`ActivityMapping`/`ConfidenceNote`/`PlanGap` pydantic
+      schemas (`agents/schemas.py`).
+- [x] `review_plan_interactive()` — CLI review gate: prints the plan,
+      accept/edit(drops into `$EDITOR` on a JSON scratch file)/reject.
+      Real interrupt, not cosmetic — full CLI wiring is backlog item 10.
+- [x] **Live-verified end-to-end** against the real KB (no API key was
+      configured as an env var; the SDK used the already-authenticated
+      `claude` CLI's own session) with a real 3-way-match use case: the
+      planner called `search_tables`/`get_table_schema` 16 times before
+      naming a single table, referenced only 9 real KB tables, and
+      produced honest medium-confidence notes on things it genuinely
+      couldn't verify (e.g. whether CDHDR logging is active for
+      EINKBELEG in a given system). This was a manual smoke-test run,
+      not saved as a fixture — see the README's live-verified callout.
 
-### 7. Critic agent (`src/sap_ocpm/agents/critic.py`)
-- [ ] Claude Agent SDK agent, tools limited to `get_table_schema`,
-      `find_join_path`, `check_event_log_spec` (read-only + validation,
-      no fix-it powers).
-- [ ] Confidence-annotated gap report as part of the run artifact.
+### 7. Critic agent (`src/sap_ocpm/agents/critic.py`) — ✅ done
+- [x] `run_critic()`: Claude Agent SDK agent, tools limited to
+      `get_table_schema`, `find_join_path` (`check_event_log_spec` also
+      wrapped and available). System prompt requires it to re-verify
+      every table/join with its own tool calls rather than trusting the
+      planner's claims.
+- [x] `CriticReport`/`CriticFinding` pydantic schemas.
+- [x] `render_report()` for a readable confidence-annotated gap report.
+- [x] **Live-verified end-to-end** against the real planner output above:
+      independently re-checked all 9 tables (`get_table_schema`) and 12
+      join pairs (`find_join_path`), correctly confirmed CDHDR/CDPOS has
+      no declared path to EKKO/EKPO (matching the KB's deliberate design,
+      not treated as an automatic failure), caught that one activity's
+      `source_tables` list omitted an intermediary table its own join
+      path required, and approved with two substantive warnings — not a
+      blind rubber stamp.
 
 ### 8. Eval harness (`eval/`)
 - [ ] `eval/cases/*.yaml` — 15–25 use cases. **Needs the user's own

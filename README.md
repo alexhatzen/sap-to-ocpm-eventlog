@@ -111,10 +111,10 @@ the same structural bar the critic agent will use later.
 | # | Component | Status |
 |---|---|---|
 | 1 | Grounded knowledge base (`src/sap_ocpm/kb/`) | ✅ done — 30 tables, loader with fail-fast join validation, 10 passing unit tests |
-| 2 | Planner agent — decomposes use case → process scope, human review gate | ⬜ not started |
+| 2 | Planner agent — decomposes use case → process scope, human review gate | ✅ done — Claude Agent SDK, live-verified end-to-end against the real KB |
 | 3 | Deterministic tools — `search_tables`, `get_table_schema`, `find_join_path`, `validate_sql`, `check_event_log_spec` | ✅ done — 5 tools, 20 passing unit tests |
 | 4 | Event log constructor — activity derivation, case granularity, timestamp resolution, gap flagging, OCEL writer | ✅ done — validated end-to-end against the real BPI2019 fixture, 12 new unit tests |
-| 5 | Critic pass — validates the plan against the KB, flags gaps with confidence | ⬜ not started |
+| 5 | Critic pass — validates the plan against the KB, flags gaps with confidence | ✅ done — Claude Agent SDK, live-verified end-to-end against a real planner-produced plan |
 | 6 | Eval harness — 15–25 expert-labeled use cases, table recall / field precision / join validity / hallucination rate | ⬜ not started |
 | 7 | Observability — per-run tool-call trace, token/cost accounting | ⬜ not started |
 | 8 | Interfaces — MCP server + CLI | ⬜ not started |
@@ -126,6 +126,15 @@ handled by plain, testable Python. The LLM's job (#2 planner, #5 critic) is
 scoped to decomposition, review, and flagging — never to inventing facts
 about the schema.
 
+Live-verified: the planner, run against a real 3-way-match use case, called
+`search_tables`/`get_table_schema` before naming a single table, produced a
+plan grounded entirely in real KB tables with honest medium-confidence notes
+where it genuinely couldn't verify something (e.g. whether CDHDR logging is
+actually active). The critic then independently re-verified every table and
+join in that plan with its own tool calls — including confirming, correctly,
+that CDHDR/CDPOS has no declared path to EKKO — and approved with two
+substantive warnings rather than a blind rubber stamp.
+
 Full phase-by-phase build plan: [`BACKLOG.md`](BACKLOG.md).
 
 ## Repository layout
@@ -134,7 +143,7 @@ Full phase-by-phase build plan: [`BACKLOG.md`](BACKLOG.md).
 src/sap_ocpm/
   kb/            # grounded knowledge base (done)
   tools/         # deterministic tools (done)
-  agents/        # planner + critic (Claude Agent SDK)
+  agents/        # planner + critic (Claude Agent SDK) (done)
   constructor/   # event log construction domain layer (done)
   dataprep/      # BPI2019 -> synthetic-but-grounded raw SAP tables (done)
   observability/ # trace + cost accounting
