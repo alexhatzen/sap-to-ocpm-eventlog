@@ -1,0 +1,28 @@
+id: 3way_match_item_level
+description: >
+  Draft case, seeded from the actual manual smoke-test run of the
+  planner during development (see BACKLOG.md item 6/7). expected_tables
+  below is my own best guess at review time, not a domain-expert
+  sign-off — is_draft stays true until someone with real P2P experience
+  confirms or corrects it.
+use_case: >
+  Build an object-centric event log for analyzing 3-way-match purchase
+  order processing: from PO item creation through goods receipt and
+  invoice receipt, at item-level granularity.
+expected_tables:
+  - EKKO
+  - EKPO
+  - EKBE
+  - MKPF
+  - MSEG
+  - RBKP
+  - RSEG
+  - CDHDR
+  - CDPOS
+notes: >
+  The live planner run this case's cassette was seeded from referenced
+  exactly this table set — worth noting as a sanity check, but a
+  cassette that happens to match its own seed source proves nothing
+  about the planner's real accuracy; treat this case as a harness
+  smoke test, not a validated benchmark result.
+is_draft: true

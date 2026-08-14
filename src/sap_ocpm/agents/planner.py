@@ -17,6 +17,7 @@ import claude_agent_sdk as sdk
 
 from sap_ocpm.agents.schemas import ProcessPlan
 from sap_ocpm.agents.sdk_tools import PLANNER_TOOLS, allowed_tool_names, build_server
+from sap_ocpm.observability.trace import RunTrace, ToolCallRecord, finalize_trace, new_trace
 
 SERVER_NAME = "sap_kb_planner"
 
@@ -77,10 +78,10 @@ def _extract_json_block(text: str) -> dict:
         raise PlannerError(f"planner output was not valid JSON: {exc}\n---\n{text}") from exc
 
 
-async def run_planner(use_case: str, *, model: str | None = None, max_turns: int = 12) -> tuple[ProcessPlan, list[dict]]:
-    """Runs the planner agent. Returns (ProcessPlan, trace) where trace
-    is a list of {"tool": name, "input": ..., } records of every tool
-    call made — the observability layer builds on this later."""
+async def run_planner(use_case: str, *, model: str | None = None, max_turns: int = 12) -> tuple[ProcessPlan, RunTrace]:
+    """Runs the planner agent. Returns (ProcessPlan, RunTrace) — the
+    trace carries every tool call plus the SDK's own reported cost/usage
+    for this run (see observability/trace.py)."""
     server = build_server(SERVER_NAME, PLANNER_TOOLS)
     options = sdk.ClaudeAgentOptions(
         max_turns=max_turns,
@@ -90,17 +91,30 @@ async def run_planner(use_case: str, *, model: str | None = None, max_turns: int
         system_prompt=SYSTEM_PROMPT,
     )
 
-    trace: list[dict] = []
+    trace = new_trace("planner", use_case)
     final_text = ""
+    result_msg = None
 
     async for msg in sdk.query(prompt=use_case, options=options):
-        if type(msg).__name__ == "AssistantMessage":
+        msg_type = type(msg).__name__
+        if msg_type == "AssistantMessage":
             for block in msg.content:
                 block_type = type(block).__name__
                 if block_type == "ToolUseBlock":
-                    trace.append({"tool": block.name, "input": block.input})
+                    trace.tool_calls.append(ToolCallRecord(tool=block.name, input=block.input))
                 elif block_type == "TextBlock":
                     final_text += block.text
+        elif msg_type == "ResultMessage":
+            result_msg = msg
+
+    finalize_trace(
+        trace,
+        num_turns=getattr(result_msg, "num_turns", None),
+        total_cost_usd=getattr(result_msg, "total_cost_usd", None),
+        usage=getattr(result_msg, "usage", None),
+        result_text=final_text,
+        is_error=getattr(result_msg, "is_error", False),
+    )
 
     if not final_text.strip():
         raise PlannerError("planner produced no text output — check the trace for what happened instead")

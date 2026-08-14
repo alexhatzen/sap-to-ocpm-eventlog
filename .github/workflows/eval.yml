@@ -1,0 +1,38 @@
+name: tests-and-eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install pydantic pyyaml networkx sqlglot requests pytest claude-agent-sdk
+          # claude-agent-sdk is required at IMPORT time (sap_ocpm.agents.__init__
+          # imports both planner.py and critic.py, which import it at module
+          # scope) even though cassette-mode eval runs never actually call the
+          # live query() API — no ANTHROPIC_API_KEY or `claude` CLI auth needed
+          # for import + cassette-mode use, only for --live.
+      - name: Run unit tests
+        run: PYTHONPATH=src:. python3 -m pytest tests/unit -q
+      - name: Run eval harness (cassette mode — no API key needed)
+        run: PYTHONPATH=src:. python3 eval/run_eval.py --include-drafts
+      - name: Fail if hallucinated_table_rate is ever nonzero
+        run: |
+          PYTHONPATH=src:. python3 -c "
+          import asyncio
+          from eval.run_eval import run
+          from eval.metrics import aggregate
+          results, _ = asyncio.run(run(include_drafts=True, live=False))
+          agg = aggregate(results)
+          print(f'hallucinated_table_rate = {agg.hallucinated_table_rate}')
+          assert agg.hallucinated_table_rate == 0, 'hallucinated_table_rate must be 0'
+          "

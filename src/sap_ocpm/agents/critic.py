@@ -19,6 +19,7 @@ import claude_agent_sdk as sdk
 
 from sap_ocpm.agents.schemas import CriticReport, ProcessPlan
 from sap_ocpm.agents.sdk_tools import CRITIC_TOOLS, allowed_tool_names, build_server
+from sap_ocpm.observability.trace import RunTrace, ToolCallRecord, finalize_trace, new_trace
 
 SERVER_NAME = "sap_kb_critic"
 
@@ -69,7 +70,7 @@ def _extract_json_block(text: str) -> dict:
         raise CriticError(f"critic output was not valid JSON: {exc}\n---\n{text}") from exc
 
 
-async def run_critic(plan: ProcessPlan, *, model: str | None = None, max_turns: int = 20) -> tuple[CriticReport, list[dict]]:
+async def run_critic(plan: ProcessPlan, *, model: str | None = None, max_turns: int = 20) -> tuple[CriticReport, RunTrace]:
     server = build_server(SERVER_NAME, CRITIC_TOOLS)
     options = sdk.ClaudeAgentOptions(
         max_turns=max_turns,
@@ -79,18 +80,31 @@ async def run_critic(plan: ProcessPlan, *, model: str | None = None, max_turns: 
         system_prompt=SYSTEM_PROMPT,
     )
 
-    trace: list[dict] = []
-    final_text = ""
     prompt = f"Review this ProcessPlan:\n\n{json.dumps(plan.model_dump(), indent=2)}"
+    trace = new_trace("critic", prompt)
+    final_text = ""
+    result_msg = None
 
     async for msg in sdk.query(prompt=prompt, options=options):
-        if type(msg).__name__ == "AssistantMessage":
+        msg_type = type(msg).__name__
+        if msg_type == "AssistantMessage":
             for block in msg.content:
                 block_type = type(block).__name__
                 if block_type == "ToolUseBlock":
-                    trace.append({"tool": block.name, "input": block.input})
+                    trace.tool_calls.append(ToolCallRecord(tool=block.name, input=block.input))
                 elif block_type == "TextBlock":
                     final_text += block.text
+        elif msg_type == "ResultMessage":
+            result_msg = msg
+
+    finalize_trace(
+        trace,
+        num_turns=getattr(result_msg, "num_turns", None),
+        total_cost_usd=getattr(result_msg, "total_cost_usd", None),
+        usage=getattr(result_msg, "usage", None),
+        result_text=final_text,
+        is_error=getattr(result_msg, "is_error", False),
+    )
 
     if not final_text.strip():
         raise CriticError("critic produced no text output — check the trace for what happened instead")

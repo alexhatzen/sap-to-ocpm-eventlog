@@ -1,0 +1,20 @@
+id: vendor_payment_timing
+description: >
+  Draft case, not yet run against the live planner and not yet
+  reviewed by a domain expert. Placeholder to exercise the harness
+  against a case with no cassette (i.e. must be skipped, not silently
+  fabricated, when run in cassette-only mode).
+use_case: >
+  Analyze how long it takes from invoice receipt to actual vendor
+  payment, and whether payment terms are being met.
+expected_tables:
+  - RBKP
+  - RSEG
+  - BKPF
+  - BSEG
+  - LFB1
+notes: >
+  No cassette exists for this case yet — running the harness in
+  cassette-only mode should report it as skipped, not silently omit it
+  or fabricate a result.
+is_draft: true

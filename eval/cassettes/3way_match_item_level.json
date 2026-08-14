@@ -1,0 +1,96 @@
+{
+  "process_name": "3-Way-Match Purchase Order Processing",
+  "process_description": "Object-centric event log capturing the item-level lifecycle of standard purchase orders subject to 3-way matching: PO item creation, goods receipt posting, and invoice receipt/verification, enabling reconciliation of PO, GR, and IR quantities/amounts per item.",
+  "document_flow": [
+    "Purchase Order (item)",
+    "Goods Receipt (material document)",
+    "Invoice Receipt (incoming invoice)"
+  ],
+  "activities": [
+    {
+      "activity_name": "Create Purchase Order Item",
+      "source_tables": [
+        "EKKO",
+        "EKPO",
+        "CDHDR",
+        "CDPOS"
+      ],
+      "notes": "EKKO/EKPO give the PO header/item attributes (incl. WEBRE flag confirming 3-way-match scope). EKPO has no creation timestamp of its own; CDHDR/CDPOS (OBJECTCLAS=EINKBELEG) supply the precise create event timestamp \u2014 EKKO.AEDAT is date-only and a fallback only."
+    },
+    {
+      "activity_name": "Record Goods Receipt",
+      "source_tables": [
+        "EKBE",
+        "MKPF",
+        "MSEG"
+      ],
+      "notes": "EKBE rows with VGABE=1 are the goods-receipt events against the PO item; BELNR/GJAHR join to MKPF (header, reliable CPUDT/CPUTM) and MSEG (item, movement type BWART for distinguishing receipt vs reversal, e.g. 101 vs 102)."
+    },
+    {
+      "activity_name": "Record Invoice Receipt",
+      "source_tables": [
+        "EKBE",
+        "RBKP",
+        "RSEG"
+      ],
+      "notes": "EKBE rows with VGABE=2 are the invoice-receipt events against the PO item; BELNR/GJAHR join to RBKP (header, CPUDT/CPUTM for ordering, STBLG flags reversed invoices as rework) and RSEG (line linking invoice back to EBELN+EBELP for the 3-way match)."
+    },
+    {
+      "activity_name": "Reverse Goods Receipt / Reverse Invoice",
+      "source_tables": [
+        "MSEG",
+        "RBKP"
+      ],
+      "notes": "Rework/exception activities: MSEG movement-type reversal pairs (e.g. 101/102) and RBKP.STBLG-populated invoices signal reversals that should be modeled as distinct events, not filtered out."
+    }
+  ],
+  "case_granularity": "item",
+  "case_granularity_rationale": "The use case explicitly asks for 'item-level granularity' and centers on 3-way match, which is inherently evaluated per PO line item (EBELN+EBELP) \u2014 quantities/amounts on a single item's GR and IR must reconcile against that same item's PO quantity/price. EKPO's own documented typical_role also flags EBELN+EBELP as the standard item-level case-notion grain for this exact analysis (consistent with BPI Challenge 2019-style P2P mining), and WEBRE (GR-based invoice verification / 3-way-match trigger) is an item-level flag, not a header-level one.",
+  "tables_referenced": [
+    "EKKO",
+    "EKPO",
+    "EKBE",
+    "MKPF",
+    "MSEG",
+    "RBKP",
+    "RSEG",
+    "CDHDR",
+    "CDPOS"
+  ],
+  "known_gaps": [
+    {
+      "category": "timestamp precision",
+      "description": "EKPO carries no native creation timestamp; without CDHDR/CDPOS logging enabled for object EINKBELEG, item-creation time degrades to EKKO.AEDAT, which is date-only and cannot support sub-day activity ordering."
+    },
+    {
+      "category": "approval trail",
+      "description": "EKKO.FRGKE only exposes the current overall release state, not a per-approver approval history; that trail (who approved what, when) is not available in standard P2P tables in this KB and would need workflow tables outside scope."
+    },
+    {
+      "category": "match discrepancy blocking",
+      "description": "Standard P2P tables here show GR/IR events and amounts but do not directly expose invoice 'blocked for payment due to match variance' status \u2014 that requires FI blocking-reason fields not covered in this KB scope, so payment-block analysis is out of scope for this plan."
+    }
+  ],
+  "confidence_notes": [
+    {
+      "topic": "EKBE as unified GR/IR event source",
+      "confidence": "high",
+      "rationale": "EKBE's VGABE field cleanly discriminates goods-receipt (1) vs invoice-receipt (2) rows per PO item, and its schema explicitly lists both as typical roles; this is the KB's documented richest source after CDHDR/CDPOS."
+    },
+    {
+      "topic": "Item-level case granularity choice",
+      "confidence": "high",
+      "rationale": "Directly grounded in the user's explicit 'item-level granularity' requirement and EKPO's own documented typical_role calling out EBELN+EBELP as the standard case grain for 3-way-match style analysis."
+    },
+    {
+      "topic": "Use of CDHDR/CDPOS for PO-item creation timestamp",
+      "confidence": "medium",
+      "rationale": "The KB confirms CDHDR/CDPOS exist and are the right source per EKPO's own gotcha, but whether change-document logging is actually active for EINKBELEG in a given system is a data-availability assumption I can't verify from schema alone."
+    },
+    {
+      "topic": "Reversal/rework activities inclusion",
+      "confidence": "medium",
+      "rationale": "MSEG and RBKP schemas both flag reversal signals (BWART pairs, STBLG) as legitimate rework events per their gotchas, but the user's use case didn't explicitly ask for rework/exception modeling \u2014 included as a reasonable scope extension for a 3-way-match analysis, not a hard requirement."
+    }
+  ]
+}
