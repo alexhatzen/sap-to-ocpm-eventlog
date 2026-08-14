@@ -135,6 +135,68 @@ join in that plan with its own tool calls — including confirming, correctly,
 that CDHDR/CDPOS has no declared path to EKKO — and approved with two
 substantive warnings rather than a blind rubber stamp.
 
+## How the codebase fits together
+
+Four layers, each only allowed to depend on the ones below it:
+
+```
+interfaces/    CLI (Typer) and MCP server (FastMCP) — thin, no logic of their own
+agents/        planner + critic (Claude Agent SDK) — reason, never invent facts
+tools/         search_tables, get_table_schema, find_join_path,     <- the two agents'
+               validate_sql, check_event_log_spec — plain Python,      only window onto
+               zero LLM calls, unit-tested in isolation                the knowledge base
+constructor/   activity_derivation, case_granularity,
+               timestamp_resolution, gap_flagging, ocel_writer — also plain Python
+kb/            30 curated table YAMLs + the loader that validates them at import time
+dataprep/      BPI2019 -> raw-table shredder (feeds constructor/ with real-shaped data)
+observability/ RunTrace + cost accounting — wraps agents/, used by interfaces/
+eval/          harness that scores agents/ output against kb/-grounded expected answers
+```
+
+**A full run, end to end** (`sap-ocpm plan` → `sap-ocpm critic` → `sap-ocpm build`):
+
+1. `agents/planner.py` gets a natural-language use case. Its *only* tools
+   are `tools/search_tables.py` and `tools/get_table_schema.py`
+   (wrapped for the Claude Agent SDK in `agents/sdk_tools.py`), both of
+   which just read `kb/tables/*.yaml` through `kb/loader.py`. It cannot
+   name a table it hasn't looked up. Output: a `ProcessPlan`
+   (`agents/schemas.py`), shown to you via `agents/planner.py`'s
+   `review_plan_interactive()` — the human review gate — before
+   anything else runs.
+2. `agents/critic.py` gets that plan and re-derives its own opinion
+   using `tools/get_table_schema.py` + `tools/find_join_path.py` — it
+   does not trust the planner's claims, it re-checks them against the
+   same KB. Output: a `CriticReport` with per-finding severity.
+3. `sap-ocpm build <fixture_dir>` runs the actual construction, which
+   never touches an LLM: `constructor/activity_derivation.py` reads raw
+   SAP-table CSVs (from `dataprep/`'s BPI2019 shredder, or a real SAP
+   export shaped the same way) and derives events from EKBE/RBKP+RSEG/
+   CDHDR+CDPOS; `constructor/case_granularity.py` groups them into
+   item- or order-level cases; `constructor/timestamp_resolution.py`
+   gives every event a real, deterministically-ordered timestamp;
+   `constructor/gap_flagging.py` (plus gaps raised inline during
+   derivation) surfaces what couldn't be resolved instead of guessing;
+   `constructor/ocel_writer.py` assembles the result and validates it
+   with `tools/check_event_log_spec.py` — the same structural check the
+   critic uses — before handing it back.
+4. Every planner/critic call along the way is wrapped in a `RunTrace`
+   (`observability/trace.py`) carrying every tool call plus the SDK's
+   own reported cost, which `interfaces/cli.py` prints after each
+   `plan`/`critic` invocation.
+5. `eval/run_eval.py` exercises step 1 against hand-labeled
+   `eval/cases/*.yaml` (via a cached `agents/planner.py` response in
+   `eval/cassettes/` by default) and scores the result with
+   `eval/metrics.py`, calling `tools/get_table_schema.py` and
+   `tools/find_join_path.py` itself to check the plan's claims —
+   exactly what the critic does, just turned into a number instead of
+   a one-off report.
+
+The dependency direction only ever points one way (`interfaces` →
+`agents`/`constructor` → `tools`/`observability` → `kb`) — nothing in
+`kb/` or `tools/` imports upward, which is what makes it possible to
+unit-test the KB and the deterministic tools completely in isolation
+from any agent or interface.
+
 ## Eval harness
 
 Every metric the design calls for is implemented in `eval/metrics.py`:
@@ -208,35 +270,102 @@ data/            # BPI2019 fixture (checked-in sample) + raw (gitignored)
 tests/           # unit + integration tests
 ```
 
-## Running the tests
+## Getting started
+
+### 1. Set up the environment
 
 ```bash
+git clone <this repo> && cd sap-to-ocpm-eventlog
 python3 -m venv .venv && source .venv/bin/activate
-pip install pydantic pyyaml networkx sqlglot requests typer rich mcp claude-agent-sdk pytest
-PYTHONPATH=src:. python3 -m pytest tests/unit -q
+pip install -e .          # editable install — this is what puts the `sap-ocpm` command on PATH
+pip install pytest        # only needed to run the test suite, not a runtime dependency
+```
 
-# rebuild the checked-in BPI2019 fixture (streams live data, no local API key needed)
+`pip install -e .` pulls in everything declared in `pyproject.toml`
+(`pydantic`, `pyyaml`, `networkx`, `sqlglot`, `requests`, `typer`,
+`rich`, `mcp`, `claude-agent-sdk`, `pandas`) and registers the
+`sap-ocpm` console script via its `[project.scripts]` entry point —
+skip it and only `python3 -m sap_ocpm.interfaces.cli` will work, not
+the bare `sap-ocpm` command used below.
+
+### 2. Verify the install
+
+```bash
+PYTHONPATH=src:. python3 -m pytest tests/unit -q
+# -> 86 passed
+```
+
+This runs entirely offline — no API key, no network call, no live
+agent. It covers the knowledge base, all deterministic tools, the
+BPI2019 shredder, the constructor, the MCP server, the CLI, and the
+eval harness in cassette mode.
+
+### 3. Try the parts that don't need an API key
+
+The checked-in BPI2019 fixture (`data/fixtures/bpi2019_sample/`) makes
+the constructor and eval harness runnable with zero setup beyond step 1:
+
+```bash
+# build a real OCEL 2.0 event log from real (BPI2019-derived) SAP tables
+sap-ocpm build data/fixtures/bpi2019_sample --granularity item --output event_log.json
+# -> "Derived 6964 events -> 300 cases (item granularity)"
+# -> "Structurally valid: True"
+# -> writes event_log.json
+
+# run the eval harness against the one seeded cassette (cassette mode = no live call)
+sap-ocpm eval --include-drafts
+```
+
+### 4. Enable the planner/critic agents (needs live access)
+
+`plan` and `critic` call a real Claude Agent SDK agent, which needs
+either:
+- a logged-in `claude` CLI on PATH (`claude --version` to check — this
+  is what the live testing during development actually used, no
+  separate API key needed), **or**
+- `ANTHROPIC_API_KEY` set in the environment.
+
+```bash
+sap-ocpm plan "analyze vendor payment timing against agreed payment terms"
+# -> runs the planner, shows tool-call count + cost, then the accept/edit/reject review gate
+# -> saves the approved plan to plan.json
+
+sap-ocpm critic plan.json
+# -> independently re-verifies every table/join in plan.json against the KB, prints a confidence-annotated report
+```
+
+`sap-ocpm eval --live` re-runs the planner for every case and refreshes
+its cassette in `eval/cassettes/` — this is the only thing in the repo
+that spends real tokens on every run; cassette mode (the default) never
+does.
+
+### 5. Run it as an MCP server (Claude Desktop / Cursor / any MCP client)
+
+```bash
+sap-ocpm mcp
+# equivalently: python3 -m sap_ocpm.interfaces.mcp_server
+```
+
+Point an MCP client at this command over stdio. It exposes
+`search_tables_tool`, `get_table_schema_tool`, `find_join_path_tool`,
+`validate_sql_tool`, `check_event_log_spec_tool`, and
+`build_event_log` (the full constructor pipeline as one call).
+
+### 6. (Optional) rebuild the BPI2019 fixture from scratch
+
+```bash
 PYTHONPATH=src python3 -m sap_ocpm.dataprep.build_fixture 300
 ```
 
-## Try it
+Streams live from 4TU.ResearchData and stops as soon as 300 traces are
+collected — never downloads the full ~729MB file. Overwrites
+`data/fixtures/bpi2019_sample/`.
 
-```bash
-# build an OCEL event log from the checked-in real-data fixture (no API key needed)
-sap-ocpm build data/fixtures/bpi2019_sample --granularity item --output event_log.json
+### Where to go next
 
-# run the eval harness (cassette mode, no API key needed)
-sap-ocpm eval --include-drafts
-
-# plan + review-gate a new use case (needs a logged-in `claude` CLI or ANTHROPIC_API_KEY)
-sap-ocpm plan "analyze vendor payment timing against agreed payment terms"
-
-# check that plan against the KB
-sap-ocpm critic plan.json
-
-# drop this project into Claude Desktop / Cursor / any MCP client
-sap-ocpm mcp
-```
+- [`BACKLOG.md`](BACKLOG.md) — full build log and what's genuinely still open.
+- [`eval/cases/README.md`](eval/cases/README.md) — how to add a real,
+  expert-labeled eval case (the biggest remaining gap).
 
 ## License
 
