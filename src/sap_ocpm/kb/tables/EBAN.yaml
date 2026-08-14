@@ -1,0 +1,32 @@
+name: EBAN
+module: MM-PUR
+description: >
+  Purchase requisition — the upstream demand document before a PO
+  exists. Relevant if the process scope starts before PO creation
+  (requisition-to-order lead time, requisition-to-PO conversion rate).
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: BANFN, description: Purchase requisition number, data_type: "CHAR(10)", is_key: true}
+  - {name: BNFPO, description: Item number, data_type: "NUMC(5)", is_key: true}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)"}
+  - {name: WERKS, description: Plant, data_type: "CHAR(4)"}
+  - {name: MENGE, description: Requested quantity, data_type: "QUAN(13,3)"}
+  - {name: ERDAT, description: Creation date, data_type: "DATS(8)"}
+  - {name: ERNAM, description: Created-by user, data_type: "CHAR(12)"}
+  - {name: BADAT, description: Release (approval) date, data_type: "DATS(8)"}
+  - {name: BSART, description: Requisition document type, data_type: "CHAR(4)"}
+  - {name: FRGKZ, description: Release indicator, data_type: "CHAR(1)"}
+  - {name: EBELN, description: Purchase order number once converted, data_type: "CHAR(10)"}
+  - {name: EBELP, description: Purchase order item once converted, data_type: "NUMC(5)"}
+join_keys:
+  - {field: MATNR, target_table: MARA, target_field: MATNR, cardinality: many_to_one}
+  - {field: EBELN, target_table: EKKO, target_field: EBELN, cardinality: many_to_one, notes: "populated only after conversion to a PO"}
+typical_role:
+  - "'Create Purchase Requisition' activity"
+  - "'Release Purchase Requisition' activity (via BADAT/FRGKZ)"
+gotchas:
+  - "ERDAT is date-only, same caveat as EKKO.AEDAT — use CDHDR for a real creation timestamp if sub-day ordering matters."
+  - "EBELN/EBELP are blank until the requisition is actually converted — do not treat every EBAN row as eventually reaching a PO; unconverted requisitions are a legitimate process outcome, not missing data."
+timestamp_fields:
+  - {date_field: ERDAT, granularity: date_only}
+  - {date_field: BADAT, granularity: date_only}

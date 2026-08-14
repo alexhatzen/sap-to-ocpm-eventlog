@@ -1,0 +1,16 @@
+name: MARC
+module: MM
+description: Material master, plant-specific data (MRP controller, planned delivery time). Master/reference data.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)", is_key: true}
+  - {name: WERKS, description: Plant, data_type: "CHAR(4)", is_key: true}
+  - {name: DISPO, description: MRP controller, data_type: "CHAR(3)"}
+  - {name: PLIFZ, description: Planned delivery time (days), data_type: "DEC(3)"}
+join_keys:
+  - {field: MATNR, target_table: MARA, target_field: MATNR, cardinality: many_to_one}
+typical_role:
+  - "PLIFZ is the planned baseline for delivery-lead-time deviation analysis, compared against actual EKET/EKBE dates"
+gotchas:
+  - "Plant-specific — the same material can have different PLIFZ per plant; do not average across plants without grouping."
+timestamp_fields: []

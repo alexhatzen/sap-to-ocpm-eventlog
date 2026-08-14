@@ -1,0 +1,21 @@
+name: EKKN
+module: MM-PUR
+description: >
+  Account assignment for a purchasing document item (cost center, GL
+  account, WBS element) — relevant for cost-center/spend-analysis cuts
+  of the process, not for activity derivation.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: EBELN, description: Purchasing document number, data_type: "CHAR(10)", is_key: true}
+  - {name: EBELP, description: Item number, data_type: "NUMC(5)", is_key: true}
+  - {name: ZEKKN, description: Sequential account assignment number, data_type: "NUMC(2)", is_key: true}
+  - {name: KOSTL, description: Cost center, data_type: "CHAR(10)"}
+  - {name: SAKTO, description: GL account, data_type: "CHAR(10)"}
+  - {name: PS_PSP_PNR, description: WBS element, data_type: "NUMC(8)"}
+join_keys:
+  - {field: EBELN, target_table: EKPO, target_field: EBELN, cardinality: many_to_one}
+typical_role:
+  - "Spend-by-cost-center dimension, not an activity source"
+gotchas:
+  - "A single PO item can have multiple account assignment splits (ZEKKN > 1) — do not assume one row per item when joining for enrichment, or you will silently multiply event counts."
+timestamp_fields: []

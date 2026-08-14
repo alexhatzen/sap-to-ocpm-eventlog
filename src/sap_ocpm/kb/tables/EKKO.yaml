@@ -1,0 +1,34 @@
+name: EKKO
+module: MM-PUR
+description: >
+  Purchasing document header. One row per purchase order, contract, or
+  scheduling agreement (BSART distinguishes the type). The anchor table
+  for the P2P document flow.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: EBELN, description: Purchasing document number, data_type: "CHAR(10)", is_key: true}
+  - {name: BUKRS, description: Company code, data_type: "CHAR(4)"}
+  - {name: BSART, description: Purchasing document type (e.g. NB standard PO, FO framework order), data_type: "CHAR(4)"}
+  - {name: LIFNR, description: Vendor account number, data_type: "CHAR(10)"}
+  - {name: EKORG, description: Purchasing organization, data_type: "CHAR(4)"}
+  - {name: EKGRP, description: Purchasing group (buyer), data_type: "CHAR(3)"}
+  - {name: AEDAT, description: Document creation date, data_type: "DATS(8)"}
+  - {name: ERNAM, description: Created-by user, data_type: "CHAR(12)"}
+  - {name: WAERS, description: Currency key, data_type: "CUKY(5)"}
+  - {name: ZTERM, description: Payment terms key, data_type: "CHAR(4)"}
+  - {name: FRGKE, description: "Overall release (approval) indicator: blank/incomplete vs released", data_type: "CHAR(1)"}
+  - {name: KNUMV, description: Number of the document condition (pricing) record, data_type: "CHAR(10)"}
+join_keys:
+  - {field: LIFNR, target_table: LFA1, target_field: LIFNR, cardinality: many_to_one, notes: "vendor on the PO"}
+  - {field: EBELN, target_table: EKPO, target_field: EBELN, cardinality: one_to_many, notes: "header to its line items"}
+  - {field: KNUMV, target_table: KONV, target_field: KNUMV, cardinality: one_to_many, notes: "pricing conditions attached to the document"}
+  - {field: BSART, target_table: T161T, target_field: BSART, cardinality: many_to_one, notes: "document type description lookup"}
+typical_role:
+  - "PO creation / 'Create Purchase Order' activity (via AEDAT, or CDHDR if you need who/when precisely)"
+  - "Approval / release workflow scope, via FRGKE"
+gotchas:
+  - "AEDAT is date-only with no paired time field in standard config — do not use it as a fine-grained ordering timestamp; prefer the corresponding CDHDR entry (OBJECTCLAS=EINKBELEG) for a real UDATE+UTIME creation event."
+  - "FRGKE only tells you the current overall release state, not the approval history or who approved what — that trail lives in CDHDR/CDPOS on this same object, or in workflow tables outside standard MM tables (flag as a known gap if per-approver timestamps are requested)."
+  - "EBELN alone is not unique across document categories in some legacy number-range setups — always confirm BSART/BSTYP scope for the process in question."
+timestamp_fields:
+  - {date_field: AEDAT, granularity: date_only, notes: "creation date only, no time component in standard config"}

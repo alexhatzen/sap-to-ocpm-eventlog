@@ -1,0 +1,27 @@
+name: BKPF
+module: FI
+description: >
+  Accounting document header. Every posting that hits the general
+  ledger (including the FI side of an invoice verification or a
+  payment) has one row here.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: BUKRS, description: Company code, data_type: "CHAR(4)", is_key: true}
+  - {name: BELNR, description: Accounting document number, data_type: "CHAR(10)", is_key: true}
+  - {name: GJAHR, description: Fiscal year, data_type: "NUMC(4)", is_key: true}
+  - {name: BLART, description: Document type (e.g. RE vendor invoice, KZ vendor payment), data_type: "CHAR(2)"}
+  - {name: BLDAT, description: Document date, data_type: "DATS(8)"}
+  - {name: BUDAT, description: Posting date, data_type: "DATS(8)"}
+  - {name: CPUDT, description: Entry date (system), data_type: "DATS(8)"}
+  - {name: CPUTM, description: Entry time (system), data_type: "TIMS(6)"}
+  - {name: AWTYP, description: "Reference procedure of the originating document (e.g. RMRP for invoice verification)", data_type: "CHAR(5)"}
+  - {name: AWKEY, description: "Reference key — concatenation of the originating document's own keys", data_type: "CHAR(20)"}
+join_keys:
+  - {field: BLART, target_table: T003T, target_field: BLART, cardinality: many_to_one}
+typical_role:
+  - "'Post Vendor Invoice' / 'Post Vendor Payment' activity, discriminated by BLART"
+gotchas:
+  - "AWKEY is a raw concatenated string (e.g. RBKP's BELNR+GJAHR run together), not a clean foreign key you can join on directly — parsing it wrong is a classic source of a plausible-looking but wrong join; prefer joining BSEG.LIFNR/EKBE for invoice-to-PO traceability instead of decoding AWKEY unless the analysis specifically needs the FI<->originating-document link."
+timestamp_fields:
+  - {date_field: BLDAT, granularity: date_only}
+  - {date_field: CPUDT, time_field: CPUTM, granularity: date_and_time, notes: "preferred for ordering"}

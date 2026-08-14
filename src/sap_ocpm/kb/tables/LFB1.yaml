@@ -1,0 +1,16 @@
+name: LFB1
+module: FI
+description: Vendor master, company-code-specific data (payment terms, reconciliation account).
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: LIFNR, description: Vendor account number, data_type: "CHAR(10)", is_key: true}
+  - {name: BUKRS, description: Company code, data_type: "CHAR(4)", is_key: true}
+  - {name: ZTERM, description: Payment terms key, data_type: "CHAR(4)"}
+  - {name: AKONT, description: Reconciliation account (GL), data_type: "CHAR(10)"}
+join_keys:
+  - {field: LIFNR, target_table: LFA1, target_field: LIFNR, cardinality: many_to_one}
+typical_role:
+  - "Default payment terms, for comparing negotiated vs actual payment timing"
+gotchas:
+  - "A vendor can have different ZTERM per company code — do not assume one payment-terms value per vendor globally."
+timestamp_fields: []

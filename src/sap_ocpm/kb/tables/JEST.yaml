@@ -1,0 +1,18 @@
+name: JEST
+module: Status-Mgmt
+description: >
+  Current object status — which system/user statuses are (in)active
+  right now for a business object. Snapshot, not history (see JCDS).
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: OBJNR, description: "Object number, encoded per object type (e.g. 'EK' + EBELN for purchasing docs) — same generic-key caveat as CDHDR.OBJECTID", data_type: "CHAR(22)", is_key: true}
+  - {name: STAT, description: Status code (e.g. I0045), data_type: "CHAR(4)", is_key: true}
+  - {name: INACT, description: Inactive flag for this status, data_type: "CHAR(1)"}
+join_keys:
+  - {field: STAT, target_table: TJ02T, target_field: ISTAT, cardinality: many_to_one}
+typical_role:
+  - "Current-state check (e.g. 'is this PO currently blocked'), used to validate a derived activity sequence ended in a status consistent with the log"
+gotchas:
+  - "This is current state only — for a status CHANGE as an activity (e.g. 'PO Blocked' → 'PO Released'), use JCDS, not JEST."
+  - "OBJNR is not directly comparable to CDHDR.OBJECTID even for the same business object — different encoding scheme, do not assume they're joinable without a decode step."
+timestamp_fields: []

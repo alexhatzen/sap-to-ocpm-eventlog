@@ -1,0 +1,25 @@
+name: MSEG
+module: MM-IM
+description: Material document item — the actual goods movement line (quantity, movement type, PO reference).
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: MBLNR, description: Material document number, data_type: "CHAR(10)", is_key: true}
+  - {name: MJAHR, description: Material document year, data_type: "NUMC(4)", is_key: true}
+  - {name: ZEILE, description: Item number, data_type: "NUMC(4)", is_key: true}
+  - {name: EBELN, description: Purchase order reference, data_type: "CHAR(10)"}
+  - {name: EBELP, description: Purchase order item reference, data_type: "NUMC(5)"}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)"}
+  - {name: WERKS, description: Plant, data_type: "CHAR(4)"}
+  - {name: BWART, description: Movement type (e.g. 101 GR into stock, 122 return delivery), data_type: "CHAR(3)"}
+  - {name: MENGE, description: Quantity, data_type: "QUAN(13,3)"}
+  - {name: DMBTR, description: Amount in local currency, data_type: "CURR(13,2)"}
+join_keys:
+  - {field: MBLNR, target_table: MKPF, target_field: MBLNR, cardinality: many_to_one, notes: "must also match MJAHR"}
+  - {field: EBELN, target_table: EKPO, target_field: EBELN, cardinality: many_to_one}
+  - {field: MATNR, target_table: MARA, target_field: MATNR, cardinality: many_to_one}
+  - {field: BWART, target_table: T156T, target_field: BWART, cardinality: many_to_one}
+typical_role:
+  - "Discriminates goods-receipt vs return/reversal activities via BWART — a 101 followed by a 102 is a GR reversal, not two independent receipts"
+gotchas:
+  - "BWART 101 vs 102 (and similar movement-type pairs) represent a posting and its reversal — collapsing them into one 'goods receipt count' overstates volume; the reversal pair is itself a legitimate rework signal for the event log."
+timestamp_fields: []

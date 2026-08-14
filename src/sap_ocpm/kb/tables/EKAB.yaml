@@ -1,0 +1,20 @@
+name: EKAB
+module: MM-PUR
+description: >
+  Release (approval) strategy documentation for a purchasing document —
+  which release group/strategy applies and whether it is fully released.
+  This is configuration/state, not a timestamped approval trail.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: EBELN, description: Purchasing document number, data_type: "CHAR(10)", is_key: true}
+  - {name: FRGGR, description: Release group, data_type: "CHAR(2)"}
+  - {name: FRGST, description: Release strategy, data_type: "CHAR(2)"}
+  - {name: FRGZU, description: Release status (concatenated codes of releases already granted), data_type: "CHAR(8)"}
+  - {name: FRGKE, description: Release indicator (release complete), data_type: "CHAR(1)"}
+join_keys:
+  - {field: EBELN, target_table: EKKO, target_field: EBELN, cardinality: one_to_one}
+typical_role:
+  - "Approval-workflow scoping (which POs required release strategy at all)"
+gotchas:
+  - "This table gives current release STATE, not a per-approver timestamped history. Reconstructing 'who approved when' as discrete activities requires CDHDR/CDPOS on EKKO field FRGKE (or FRGZU), and even then only shows the flag flip, not the approver's own workflow inbox action — flag this explicitly as a known gap rather than fabricating an approval-step timeline standard tables don't retain."
+timestamp_fields: []

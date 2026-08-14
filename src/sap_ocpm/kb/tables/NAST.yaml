@@ -1,0 +1,23 @@
+name: NAST
+module: Basis-Output
+description: >
+  Output/message status — records that a message (e.g. print/EDI/email
+  of a PO to the vendor) was determined and its processing status.
+  Useful for a 'PO Transmitted to Vendor' activity that no other P2P
+  table captures.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: OBJKY, description: "Object key (e.g. EBELN for purchasing output) — generic field, same caveat as CDHDR.OBJECTID/JEST.OBJNR", data_type: "CHAR(22)", is_key: true}
+  - {name: KAPPL, description: "Application (e.g. EF for purchasing)", data_type: "CHAR(2)", is_key: true}
+  - {name: KSCHL, description: "Output/message type (e.g. NEU = new PO output)", data_type: "CHAR(4)", is_key: true}
+  - {name: ERDAT, description: Creation date, data_type: "DATS(8)"}
+  - {name: ERUHR, description: Creation time, data_type: "TIMS(6)"}
+  - {name: VSTAT, description: "Processing status (0=not processed, 1=successfully processed, 2=error, ...)", data_type: "CHAR(1)"}
+join_keys: []
+typical_role:
+  - "'Transmit PO to Vendor' activity, filtered to KAPPL=EF and VSTAT=1 (successfully sent)"
+gotchas:
+  - "OBJKY is generic like OBJECTID/OBJNR elsewhere in this KB — decoding which document it refers to depends on KAPPL, and is deliberately left undeclared as a join_key for the same correct-by-construction reason as CDHDR."
+  - "VSTAT=2 (processing error) rows are real failed-transmission events worth keeping in the log, not filtering out as noise."
+timestamp_fields:
+  - {date_field: ERDAT, time_field: ERUHR, granularity: date_and_time}

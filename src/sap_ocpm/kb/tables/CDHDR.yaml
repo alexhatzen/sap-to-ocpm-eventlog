@@ -1,0 +1,26 @@
+name: CDHDR
+module: Basis-ChangeDocs
+description: >
+  Change document header. Every logged change to a business object
+  (PO, material, vendor, ...) that has change-document logging active
+  gets one row here, with a real system date+time. This — together
+  with CDPOS — is usually the richest activity-derivation source for
+  events that header/item tables themselves don't timestamp (item
+  deletion, price change, release, item-added-late).
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: OBJECTCLAS, description: "Change document object class (e.g. EINKBELEG for purchasing documents)", data_type: "CHAR(15)"}
+  - {name: OBJECTID, description: "Object key, encoded per OBJECTCLAS-specific rules (see gotcha) — NOT a plain foreign key", data_type: "CHAR(90)", is_key: true}
+  - {name: CHANGENR, description: Change document number, data_type: "CHAR(10)", is_key: true}
+  - {name: USERNAME, description: User who made the change, data_type: "CHAR(12)"}
+  - {name: UDATE, description: Change date, data_type: "DATS(8)"}
+  - {name: UTIME, description: Change time, data_type: "TIMS(6)"}
+  - {name: TCODE, description: Transaction code used, data_type: "CHAR(20)"}
+join_keys: []
+typical_role:
+  - "Fine-grained activity derivation for anything that isn't a first-class timestamped table row: item added/deleted, price changed, quantity changed, release flag flipped"
+gotchas:
+  - "OBJECTID is deliberately NOT modeled as a declared join_key here: for OBJECTCLAS=EINKBELEG it is the PO number (EBELN) left-padded to 10 characters inside a wider generic field, but the padding/encoding rule differs by object class (materials, vendors, etc. encode differently). Decoding it is a per-object-class rule, not a clean FK — find_join_path correctly reports no declared path from CDHDR to EKKO; the decode rule belongs in application logic (constructor/activity_derivation.py), reviewed by a human, not assumed by the agent."
+  - "Change-document logging must be configured ON for the object/field in question — silence in CDHDR does not prove nothing changed, it can mean logging wasn't active. This is a standing known-gap candidate."
+timestamp_fields:
+  - {date_field: UDATE, time_field: UTIME, granularity: date_and_time}
