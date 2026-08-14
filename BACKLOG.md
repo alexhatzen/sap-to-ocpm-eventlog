@@ -54,22 +54,41 @@ output — see `README.md` once written, or the original planning conversation).
       CDHDR, malformed SQL, dangling event-log references, bad
       timestamps, typed vs dict input.
 
-### 4. Data prep (`src/sap_ocpm/dataprep/`)
-- [ ] `download_bpi2019.py` — pull the ~38MB CSV export from
-      4TU.ResearchData (DOI `10.4121/uuid:d06aff4b-79f0-45e6-8ec8-e19730c248f1`),
-      cache under `data/raw/` (gitignored).
-- [ ] `mapping.yaml` — documented BPI2019-attribute → SAP-field mapping
-      (`Purchasing Document`→EKKO/EKPO.EBELN, `Item`→EKPO.EBELP,
-      `Vendor`→LFA1.LIFNR, `GR-Based Inv. Verif.`→EKPO.WEBRE,
-      `Item Category`→EKPO.PSTYP, event→CDHDR/CDPOS/EKBE row depending on
-      activity type).
-- [ ] `shred_to_sap_tables.py` — apply the mapping, produce raw-table CSVs
-      matching the 30-table KB schema.
-- [ ] Checked-in fixture: `data/fixtures/bpi2019_sample/` — stratified
-      few-hundred-PO excerpt (CC BY 4.0, cite
-      `van Dongen, B.F. (2019). BPI Challenge 2019. 4TU.ResearchData.`).
-      Retain the *original* BPI2019 log for the same sampled POs
-      alongside the shredded tables — it's the eval harness's ground truth.
+### 4. Data prep (`src/sap_ocpm/dataprep/`) — ✅ done
+- [x] `download_bpi2019.py` — no CSV export actually exists for this
+      dataset (verified against the figshare API backing 4TU.ResearchData,
+      article 12715853: only the ~729MB XES file is hosted). Built a
+      streaming SAX-based downloader instead — `stream_bpi2019_traces()`
+      reads the live file over HTTP and stops as soon as N traces are
+      collected, closing the connection early. Never downloads the full
+      file. Verified against the real URL (5-trace and 300-trace runs).
+- [x] `mapping.yaml` — documented BPI2019-attribute → SAP-field mapping,
+      grounded in the actual observed XES structure (fetched a byte-range
+      sample first rather than guessing). Explicit per-activity table
+      routing for the high-frequency activities (`Create Purchase Order
+      Item`, `Vendor creates invoice`, `Record Goods Receipt`, `Record
+      Invoice Receipt`, `Record Service Entry Sheet`, `Clear Invoice`,
+      `SRM: *`), a documented generic CDHDR/CDPOS fallback for everything
+      else, and a `known_gaps` section (no MATNR/quantity in BPI2019, so
+      MARA/MAKT/MARC are out of scope; synthesized IDs aren't real SAP
+      number ranges).
+- [x] `shred_to_sap_tables.py` — applies the mapping; `shred_traces()`
+      returns a `ShreddedTables` dataclass (rows per KB table) plus a
+      `mapping_coverage` counter — every shredder run reports exactly
+      which activities got an explicit mapping vs. the fallback, rather
+      than silently dropping or inventing coverage.
+- [x] `build_fixture.py` — streams a fixed sample, shreds it, writes CSVs
+      + `mapping_coverage_report.json` + a provenance `README.md` to
+      `data/fixtures/bpi2019_sample/`.
+- [x] Checked-in fixture: `data/fixtures/bpi2019_sample/` — 300 real
+      PO-item cases (~1.3MB total across 13 CSVs), CC BY 4.0, cited
+      inline. The original (unshredded) BPI2019 events for the same
+      cases are kept as `ground_truth_log.csv` — the eval harness's
+      ground truth.
+- [x] Unit tests (`tests/unit/test_shred_to_sap_tables.py`, 10 passing,
+      offline/no network) covering every mapped activity branch, the
+      SRM proxy, the generic fallback, EKKO dedup across items on the
+      same PO, and ground-truth-log fidelity.
 
 ### 5. Event log constructor (`src/sap_ocpm/constructor/`)
 - [ ] `activity_derivation.py` — merge header dates, item events,

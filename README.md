@@ -78,7 +78,18 @@ raw table layer (`EKKO`/`EKPO`/`EKBE`/`CDHDR`/`CDPOS`/... shaped) using the
 dataset's documented attributes. The original BPI2019 log for the sampled
 purchase orders is kept alongside as **ground truth** — so the eval harness
 can check the reconstructed event log against a real process, not just
-against itself. *(⬜ not yet built — see Backlog.)*
+against itself.
+
+The checked-in fixture (`data/fixtures/bpi2019_sample/`, ~1.3MB, 300
+real PO-item cases) is built by streaming the live 4TU.ResearchData
+file and stopping as soon as enough traces are collected — the
+downloader never pulls the full ~729MB XES file. The shredding rules
+are documented per-activity in `src/sap_ocpm/dataprep/mapping.yaml`,
+including the activities that don't have a clean standard-table home
+(e.g. BPI2019's upstream "SRM: ..." sourcing-workflow steps) and are
+honestly routed to a generic, disclosed proxy instead of an invented
+table — the fixture's `mapping_coverage_report.json` shows exactly
+which activities got an explicit mapping vs. the fallback on each run.
 
 ## Architecture
 
@@ -87,7 +98,7 @@ against itself. *(⬜ not yet built — see Backlog.)*
 | 1 | Grounded knowledge base (`src/sap_ocpm/kb/`) | ✅ done — 30 tables, loader with fail-fast join validation, 10 passing unit tests |
 | 2 | Planner agent — decomposes use case → process scope, human review gate | ⬜ not started |
 | 3 | Deterministic tools — `search_tables`, `get_table_schema`, `find_join_path`, `validate_sql`, `check_event_log_spec` | ✅ done — 5 tools, 20 passing unit tests |
-| 4 | Event log constructor — activity derivation, case granularity, timestamp resolution, gap flagging, OCEL writer | ⬜ not started |
+| 4 | Event log constructor — activity derivation, case granularity, timestamp resolution, gap flagging, OCEL writer | ⬜ not started (data prep for it is done — see below) |
 | 5 | Critic pass — validates the plan against the KB, flags gaps with confidence | ⬜ not started |
 | 6 | Eval harness — 15–25 expert-labeled use cases, table recall / field precision / join validity / hallucination rate | ⬜ not started |
 | 7 | Observability — per-run tool-call trace, token/cost accounting | ⬜ not started |
@@ -110,7 +121,7 @@ src/sap_ocpm/
   tools/         # deterministic tools (done)
   agents/        # planner + critic (Claude Agent SDK)
   constructor/   # event log construction domain layer
-  dataprep/      # BPI2019 -> synthetic-but-grounded raw SAP tables
+  dataprep/      # BPI2019 -> synthetic-but-grounded raw SAP tables (done)
   observability/ # trace + cost accounting
   interfaces/    # MCP server + CLI
 eval/            # eval harness: cases, metrics, cassettes
@@ -122,8 +133,11 @@ tests/           # unit + integration tests
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install pydantic pyyaml networkx sqlglot pytest
+pip install pydantic pyyaml networkx sqlglot requests pytest
 PYTHONPATH=src python3 -m pytest tests/unit -q
+
+# rebuild the checked-in BPI2019 fixture (streams live data, no local API key needed)
+PYTHONPATH=src python3 -m sap_ocpm.dataprep.build_fixture 300
 ```
 
 ## License

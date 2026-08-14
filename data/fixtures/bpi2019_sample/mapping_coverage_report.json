@@ -1,0 +1,18 @@
+{
+  "SRM:* -> CDHDR/CDPOS (documented proxy)": 2711,
+  "Record Invoice Receipt -> EKBE": 905,
+  "Record Goods Receipt -> MKPF/MSEG/EKBE": 884,
+  "Record Service Entry Sheet -> EKBE (VGABE=1, no MKPF/MSEG)": 683,
+  "Vendor creates invoice -> RBKP/RSEG": 663,
+  "Clear Invoice -> BKPF/BSEG (simplified clearing doc)": 643,
+  "Create Purchase Order Item -> EKPO/CDHDR/CDPOS": 300,
+  "UNMAPPED: 'Change Price' -> CDHDR/CDPOS fallback": 54,
+  "UNMAPPED: 'Cancel Invoice Receipt' -> CDHDR/CDPOS fallback": 41,
+  "UNMAPPED: 'Vendor creates debit memo' -> CDHDR/CDPOS fallback": 34,
+  "UNMAPPED: 'Remove Payment Block' -> CDHDR/CDPOS fallback": 22,
+  "UNMAPPED: 'Cancel Goods Receipt' -> CDHDR/CDPOS fallback": 8,
+  "UNMAPPED: 'Change Delivery Indicator' -> CDHDR/CDPOS fallback": 5,
+  "UNMAPPED: 'Change Final Invoice Indicator' -> CDHDR/CDPOS fallback": 5,
+  "UNMAPPED: 'Delete Purchase Order Item' -> CDHDR/CDPOS fallback": 4,
+  "UNMAPPED: 'Change Quantity' -> CDHDR/CDPOS fallback": 2
+}

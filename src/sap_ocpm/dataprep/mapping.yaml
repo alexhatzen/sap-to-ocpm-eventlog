@@ -1,0 +1,106 @@
+# BPI Challenge 2019 -> synthetic-but-grounded raw SAP table mapping.
+#
+# BPI2019 is a flattened, already-mined event log, not raw SAP tables.
+# This file documents, explicitly, how each of its attributes was
+# reverse-engineered into rows on the KB's 30 P2P tables — so the
+# "raw SAP data" the constructor operates on downstream is grounded in
+# a real process (not fabricated), while still being traceable back to
+# an honest, auditable mapping decision rather than presented as if it
+# came out of an actual SAP system.
+#
+# Source: van Dongen, B.F. (2019). BPI Challenge 2019. 4TU.ResearchData.
+# CC BY 4.0. DOI 10.4121/uuid:d06aff4b-79f0-45e6-8ec8-e19730c248f1
+
+case_attribute_mapping:
+  # BPI2019 trace attribute -> SAP table.field
+  "Purchasing Document": "EKKO.EBELN / EKPO.EBELN"
+  "Item": "EKPO.EBELP"
+  "Vendor": "LFA1.LIFNR"
+  "Name": "LFA1.NAME1"
+  "GR-Based Inv. Verif.": "EKPO.WEBRE"
+  "Item Category": "EKPO.PSTYP  (free-text category collapsed to a short code — see gotcha)"
+  "Document Type": "EKKO.BSART (free-text mapped to a short synthetic code, not a real T161T-registered code)"
+  "Company": "EKKO.BUKRS"
+  "concept:name (trace)": "used only to derive EBELN+EBELP; not stored as-is on any table"
+
+event_activity_mapping:
+  # BPI2019 event concept:name -> which table(s) get a row, and how.
+  # Any activity NOT listed here falls back to the "unmapped_default"
+  # rule below rather than being silently dropped or invented a home —
+  # see shred_to_sap_tables.py's mapping-coverage report for exactly
+  # which activities hit the fallback on a given run.
+  "Create Purchase Order Item":
+    tables: [EKPO, CDHDR, CDPOS]
+    rule: >
+      Creates the EKPO row itself (first occurrence for a case) plus a
+      CDHDR/CDPOS pair (OBJECTCLAS=EINKBELEG, TABNAME=EKPO, CHNGIND=I)
+      recording the creation event with a real timestamp — mirroring
+      how EKPO itself carries no creation timestamp in real SAP.
+  "Vendor creates invoice":
+    tables: [RBKP, RSEG]
+    rule: >
+      Synthesizes an invoice document header/item referencing this PO
+      item. BELNR/GJAHR are sequentially synthesized, not real SAP
+      number-range output.
+  "Record Goods Receipt":
+    tables: [MKPF, MSEG, EKBE]
+    rule: >
+      Synthesizes a material document (movement type 101) and the
+      corresponding EKBE VGABE=1 history row referencing it.
+  "Record Invoice Receipt":
+    tables: [EKBE]
+    rule: >
+      EKBE VGABE=2 history row referencing the RBKP document created by
+      the matching "Vendor creates invoice" event for this case.
+  "Record Service Entry Sheet":
+    tables: [EKBE]
+    rule: >
+      Real SAP: service entry sheets (ML81N / ESSR-ESLL) are the
+      service-procurement analogue of a goods receipt and post to EKBE
+      under the same VGABE=1 as a material GR. ESSR/ESLL are out of
+      this KB's P2P table scope, so no MKPF/MSEG is synthesized for
+      this activity — a documented simplification, not a claim those
+      tables exist in the fixture.
+  "Clear Invoice":
+    tables: [BKPF, BSEG]
+    rule: >
+      Synthesizes the clearing (payment) accounting document directly,
+      rather than modeling the full BKPF/BSEG chain from the original
+      invoice posting forward through to clearing. Enough to
+      demonstrate a "Clear Vendor Invoice" activity node with a real
+      AUGDT — not a full FI mirror of the original posting.
+  "SRM: *":
+    tables: [CDHDR, CDPOS]
+    rule: >
+      KNOWN APPROXIMATION, disclosed rather than hidden: BPI2019's
+      "SRM: ..." activities represent steps in an upstream SAP SRM
+      (sourcing) workflow that historically has no direct standard-ECC
+      table in this KB's P2P scope. Rather than inventing a fictitious
+      table, these are recorded as generic CDHDR/CDPOS change-document
+      entries (TABNAME=EBAN, FNAME=SRM_STATUS, VALUE_NEW=<activity
+      name>) — a documented proxy, not a claim that SAP ECC itself
+      logs SRM steps this way.
+
+unmapped_default:
+  tables: [CDHDR, CDPOS]
+  rule: >
+    Any event whose activity name is not explicitly listed above is
+    recorded as a generic CDHDR/CDPOS change-document entry
+    (TABNAME=EKPO, FNAME=UNMAPPED_ACTIVITY, VALUE_NEW=<activity name>)
+    so no event is silently dropped, and every shredder run emits a
+    mapping-coverage report naming exactly which activities hit this
+    path — this is a known-gap flag applied to the dataprep step
+    itself, in the same spirit as the constructor's gap_flagging.
+
+known_gaps:
+  - "BPI2019 carries no material number (MATNR) or quantity at the item
+    level, only a running 'Cumulative net worth (EUR)' figure — MARA/
+    MAKT/MARC are out of scope for the shredded fixture, and MENGE
+    fields are left at a placeholder value rather than fabricated."
+  - "BELNR/MBLNR/CHANGENR/GJAHR values in the shredded tables are
+    sequentially synthesized per shredding run, not real SAP number
+    ranges — do not treat them as stable identifiers across runs."
+  - "Document Type / Item Category are free text in BPI2019, collapsed
+    here to short codes for BSART/PSTYP that are NOT registered in the
+    T161T lookup table shipped in this KB (no client config values
+    exist for a dataset that was never a real client)."
