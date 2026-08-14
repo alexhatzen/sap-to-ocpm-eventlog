@@ -1,0 +1,20 @@
+name: CDPOS
+module: Basis-ChangeDocs
+description: Change document item — the actual old/new value for one changed field, under a CDHDR header.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: OBJECTCLAS, description: Change document object class, data_type: "CHAR(15)"}
+  - {name: OBJECTID, description: Object key (same encoding caveat as CDHDR), data_type: "CHAR(90)"}
+  - {name: CHANGENR, description: Change document number, data_type: "CHAR(10)", is_key: true}
+  - {name: TABNAME, description: Name of the changed table (e.g. EKPO), data_type: "CHAR(30)"}
+  - {name: FNAME, description: Name of the changed field, data_type: "CHAR(30)"}
+  - {name: CHNGIND, description: "Change indicator: I=insert, U=update, D=delete", data_type: "CHAR(1)"}
+  - {name: VALUE_NEW, description: New value, data_type: "CHAR(254)"}
+  - {name: VALUE_OLD, description: Old value, data_type: "CHAR(254)"}
+join_keys:
+  - {field: CHANGENR, target_table: CDHDR, target_field: CHANGENR, cardinality: many_to_one, notes: "also implicitly scoped by the same OBJECTCLAS+OBJECTID as the header"}
+typical_role:
+  - "Discriminates WHAT changed (TABNAME+FNAME+CHNGIND) so activity derivation can label 'Item Deleted' vs 'Price Changed' vs 'Delivery Date Changed' as distinct activities instead of one generic 'Changed' event"
+gotchas:
+  - "CHNGIND='I' on TABNAME=EKPO is the closest standard-table proxy for 'item added after initial PO creation' — a genuinely useful late-item-addition signal, but it is a proxy, not a first-class 'item added' event type, and should be labeled as derived in the output spec."
+timestamp_fields: []

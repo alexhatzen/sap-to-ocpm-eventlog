@@ -1,0 +1,16 @@
+name: LFM1
+module: MM-PUR
+description: Vendor master, purchasing-organization-specific data.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: LIFNR, description: Vendor account number, data_type: "CHAR(10)", is_key: true}
+  - {name: EKORG, description: Purchasing organization, data_type: "CHAR(4)", is_key: true}
+  - {name: WEBRE, description: Default GR-based invoice verification setting for this vendor/org, data_type: "CHAR(1)"}
+  - {name: KZAUT, description: Automatic PO generation allowed, data_type: "CHAR(1)"}
+join_keys:
+  - {field: LIFNR, target_table: LFA1, target_field: LIFNR, cardinality: many_to_one}
+typical_role:
+  - "Explains why a vendor's items default to 3-way match — cross-check against the item-level EKPO.WEBRE, which can override this default"
+gotchas:
+  - "This is a default, not a guarantee — EKPO.WEBRE on the actual PO item is the authoritative value for a given process instance."
+timestamp_fields: []

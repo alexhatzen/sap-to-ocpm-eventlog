@@ -1,0 +1,15 @@
+name: TJ02T
+module: Status-Mgmt
+description: System status text lookup — human-readable description for a JEST/JCDS status code.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: ISTAT, description: System status code, data_type: "CHAR(4)", is_key: true}
+  - {name: SPRAS, description: Language key, data_type: "LANG(1)", is_key: true}
+  - {name: TXT04, description: Short text (4 chars), data_type: "CHAR(4)"}
+  - {name: TXT30, description: Long text, data_type: "CHAR(30)"}
+join_keys: []
+typical_role:
+  - "Pure lookup — turns 'I0045' into a readable activity label"
+gotchas:
+  - "One row per status PER LANGUAGE — filter SPRAS or you'll fan out labels."
+timestamp_fields: []

@@ -1,0 +1,21 @@
+name: EKET
+module: MM-PUR
+description: >
+  Delivery schedule lines for a PO item — planned delivery dates and
+  quantities, and how much has actually been received against each line.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: EBELN, description: Purchasing document number, data_type: "CHAR(10)", is_key: true}
+  - {name: EBELP, description: Item number, data_type: "NUMC(5)", is_key: true}
+  - {name: ETENR, description: Delivery schedule line counter, data_type: "NUMC(4)", is_key: true}
+  - {name: EINDT, description: Scheduled delivery date, data_type: "DATS(8)"}
+  - {name: MENGE, description: Scheduled quantity, data_type: "QUAN(13,3)"}
+  - {name: WEMNG, description: Quantity already goods-receipted against this line, data_type: "QUAN(13,3)"}
+join_keys:
+  - {field: EBELN, target_table: EKPO, target_field: EBELN, cardinality: many_to_one}
+typical_role:
+  - "On-time-delivery / delivery-date-adherence analysis (EINDT vs actual GR date from EKBE/MKPF)"
+gotchas:
+  - "EINDT is a plan date, not an event — do not treat schedule-line rows as activities themselves; join to EKBE/MSEG for the actual goods receipt event."
+timestamp_fields:
+  - {date_field: EINDT, granularity: date_only}

@@ -1,0 +1,19 @@
+name: LFA1
+module: MM/FI
+description: Vendor master, general data (client-independent). Master/reference data.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: LIFNR, description: Vendor account number, data_type: "CHAR(10)", is_key: true}
+  - {name: NAME1, description: Vendor name, data_type: "CHAR(35)"}
+  - {name: LAND1, description: Country key, data_type: "CHAR(3)"}
+  - {name: ORT01, description: City, data_type: "CHAR(35)"}
+  - {name: SPERR, description: Central posting block, data_type: "CHAR(1)"}
+  - {name: LOEVM, description: Central deletion flag, data_type: "CHAR(1)"}
+  - {name: ERDAT, description: Creation date, data_type: "DATS(8)"}
+join_keys: []
+typical_role:
+  - "Vendor dimension (name/country/blocked status) for segmenting the event log — not an activity source itself"
+gotchas:
+  - "SPERR='X' blocks new postings but does not retroactively invalidate history — a currently-blocked vendor can have a long, entirely legitimate process history before the block."
+timestamp_fields:
+  - {date_field: ERDAT, granularity: date_only}

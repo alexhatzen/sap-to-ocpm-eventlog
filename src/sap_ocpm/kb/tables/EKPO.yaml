@@ -1,0 +1,31 @@
+name: EKPO
+module: MM-PUR
+description: >
+  Purchasing document item. One row per PO line item. Carries the
+  material/quantity/price and the flags that determine which downstream
+  flow (2-way vs 3-way match, GR-based invoice verification) applies.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: EBELN, description: Purchasing document number, data_type: "CHAR(10)", is_key: true}
+  - {name: EBELP, description: Item number of the purchasing document, data_type: "NUMC(5)", is_key: true}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)"}
+  - {name: WERKS, description: Plant, data_type: "CHAR(4)"}
+  - {name: MENGE, description: PO quantity, data_type: "QUAN(13,3)"}
+  - {name: MEINS, description: Order unit, data_type: "UNIT(3)"}
+  - {name: NETPR, description: Net price, data_type: "CURR(11,2)"}
+  - {name: PSTYP, description: "Item category (0=standard, 3=consignment, ...)", data_type: "CHAR(1)"}
+  - {name: LOEKZ, description: Deletion indicator, data_type: "CHAR(1)"}
+  - {name: ELIKZ, description: Delivery completed indicator, data_type: "CHAR(1)"}
+  - {name: EREKZ, description: Final invoice indicator, data_type: "CHAR(1)"}
+  - {name: WEBRE, description: GR-based invoice verification flag (3-way match trigger), data_type: "CHAR(1)"}
+join_keys:
+  - {field: EBELN, target_table: EKKO, target_field: EBELN, cardinality: many_to_one, notes: "item to its header"}
+  - {field: MATNR, target_table: MARA, target_field: MATNR, cardinality: many_to_one}
+typical_role:
+  - "Defines whether the process instance is 2-way or 3-way match (via WEBRE + Goods Receipt indicator combination)"
+  - "Item-level case granularity anchor — most SAP-native process mining case notions (including BPI Challenge 2019) are at this EBELN+EBELP grain, not the header"
+gotchas:
+  - "EKPO has no creation timestamp of its own — 'item added' must be derived from CDHDR/CDPOS (OBJECTCLAS=EINKBELEG, changed table EKPO) or approximated from the header AEDAT, which is a real precision loss to disclose, not paper over."
+  - "LOEKZ='L' means the item is flagged for deletion, not gone — it still has history in EKBE/CDPOS. Excluding it silently will under-count rework activities."
+  - "EBELN+EBELP is the true item key; EBELN alone (as used for the EKKO join) is intentionally many-to-one from this table's perspective."
+timestamp_fields: []

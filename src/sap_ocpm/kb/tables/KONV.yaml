@@ -1,0 +1,19 @@
+name: KONV
+module: MM-PUR
+description: >
+  Pricing conditions attached to a purchasing document (or any pricing
+  procedure document) via KNUMV. Price-composition dimension, not a
+  process activity source.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: KNUMV, description: Number of the document condition record, data_type: "CHAR(10)", is_key: true}
+  - {name: KPOSN, description: Item number, data_type: "NUMC(6)", is_key: true}
+  - {name: KSCHL, description: "Condition type (e.g. PB00 gross price, RA00 discount)", data_type: "CHAR(4)"}
+  - {name: KBETR, description: Condition rate, data_type: "DEC(11,2)"}
+  - {name: KWERT, description: Condition value, data_type: "CURR(13,2)"}
+join_keys: []
+typical_role:
+  - "Price-composition breakdown for a PO — useful for a 'price changed' magnitude alongside the CDPOS event that flags a price change occurred"
+gotchas:
+  - "Many condition types can exist per KNUMV (base price, freight, discount, tax) — summing KWERT across all rows without filtering KSCHL will not reproduce the net price on EKPO.NETPR."
+timestamp_fields: []

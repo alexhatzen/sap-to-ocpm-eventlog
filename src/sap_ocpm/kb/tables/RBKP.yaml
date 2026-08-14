@@ -1,0 +1,28 @@
+name: RBKP
+module: MM-IV
+description: >
+  Incoming invoice document header (logistics invoice verification,
+  transaction MIRO). Header for RSEG's line items.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: BELNR, description: Invoice document number, data_type: "CHAR(10)", is_key: true}
+  - {name: GJAHR, description: Fiscal year, data_type: "NUMC(4)", is_key: true}
+  - {name: BLDAT, description: Document date (vendor's invoice date), data_type: "DATS(8)"}
+  - {name: BUDAT, description: Posting date, data_type: "DATS(8)"}
+  - {name: CPUDT, description: Entry date (system), data_type: "DATS(8)"}
+  - {name: CPUTM, description: Entry time (system), data_type: "TIMS(6)"}
+  - {name: LIFNR, description: Vendor account number, data_type: "CHAR(10)"}
+  - {name: RMWWR, description: Gross invoice amount, data_type: "CURR(13,2)"}
+  - {name: WAERS, description: Currency key, data_type: "CUKY(5)"}
+  - {name: STBLG, description: Reversal document number (if this invoice was reversed), data_type: "CHAR(10)"}
+  - {name: XBLNR, description: Vendor's own reference/invoice number, data_type: "CHAR(16)"}
+join_keys:
+  - {field: LIFNR, target_table: LFA1, target_field: LIFNR, cardinality: many_to_one}
+typical_role:
+  - "'Vendor creates invoice' / 'Record Invoice Receipt' activity"
+gotchas:
+  - "BLDAT is the vendor's self-reported invoice date — it can predate, by weeks, when SAP actually saw the document, and is a common source of impossible-looking negative durations if used for process timing instead of CPUDT/CPUTM."
+  - "STBLG populated means the invoice was reversed — a reversed invoice is a real rework/exception activity, not noise to filter out."
+timestamp_fields:
+  - {date_field: BLDAT, granularity: date_only, notes: "vendor-reported date, not a reliable process-timing anchor"}
+  - {date_field: CPUDT, time_field: CPUTM, granularity: date_and_time, notes: "system entry timestamp — use this for ordering"}

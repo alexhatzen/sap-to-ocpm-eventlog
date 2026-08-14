@@ -1,0 +1,15 @@
+name: MAKT
+module: MM
+description: Material descriptions, by language. Pure text/lookup table.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)", is_key: true}
+  - {name: SPRAS, description: Language key, data_type: "LANG(1)", is_key: true}
+  - {name: MAKTX, description: Material description, data_type: "CHAR(40)"}
+join_keys:
+  - {field: MATNR, target_table: MARA, target_field: MATNR, cardinality: many_to_one}
+typical_role:
+  - "Human-readable enrichment only"
+gotchas:
+  - "One row per material PER LANGUAGE — joining without filtering SPRAS multiplies rows if more than one language is maintained."
+timestamp_fields: []

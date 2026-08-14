@@ -1,0 +1,23 @@
+name: JCDS
+module: Status-Mgmt
+description: >
+  Change history for object statuses — each row is one status
+  activation/deactivation event with a real timestamp. The status-flow
+  analogue of CDHDR/CDPOS for status transitions specifically.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: OBJNR, description: Object number (same encoding as JEST), data_type: "CHAR(22)", is_key: true}
+  - {name: STAT, description: Status code, data_type: "CHAR(4)", is_key: true}
+  - {name: CHGNR, description: Change number, data_type: "NUMC(4)", is_key: true}
+  - {name: UDATE, description: Change date, data_type: "DATS(8)"}
+  - {name: UTIME, description: Change time, data_type: "TIMS(6)"}
+  - {name: INACT, description: "Inactive flag after this change (blank=activated, X=deactivated)", data_type: "CHAR(1)"}
+join_keys:
+  - {field: OBJNR, target_table: JEST, target_field: OBJNR, cardinality: many_to_one}
+  - {field: STAT, target_table: TJ02T, target_field: ISTAT, cardinality: many_to_one}
+typical_role:
+  - "Status-transition activities: 'PO Blocked', 'PO Released', 'Invoice Blocked for Payment', etc., each with a real UDATE+UTIME"
+gotchas:
+  - "A single business event can flip several statuses at once (multiple JCDS rows sharing UDATE/UTIME/CHGNR) — collapse same-CHGNR rows into one activity instance rather than emitting one event per status code, or the log inflates activity counts for no process reason."
+timestamp_fields:
+  - {date_field: UDATE, time_field: UTIME, granularity: date_and_time}

@@ -1,0 +1,36 @@
+name: EKBE
+module: MM-PUR
+description: >
+  History per purchasing document — the append-only ledger of goods
+  receipts, invoice receipts, and other document-flow events against a
+  PO item. VGABE (transaction/event type) discriminates what kind of
+  event each row represents. The single richest table for P2P activity
+  derivation after CDHDR/CDPOS.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: EBELN, description: Purchasing document number, data_type: "CHAR(10)", is_key: true}
+  - {name: EBELP, description: Item number, data_type: "NUMC(5)", is_key: true}
+  - {name: ZEKKN, description: Sequential history entry number, data_type: "NUMC(3)", is_key: true}
+  - {name: VGABE, description: "Transaction/event type: 1=goods receipt, 2=invoice receipt, 3=order (subsequent), 9=delivery costs", data_type: "CHAR(1)"}
+  - {name: GJAHR, description: Fiscal year of the referenced document, data_type: "NUMC(4)"}
+  - {name: BELNR, description: "Referenced document number — material doc for VGABE=1, accounting/invoice doc for VGABE=2 (see gotcha)", data_type: "CHAR(10)"}
+  - {name: BUDAT, description: Posting date, data_type: "DATS(8)"}
+  - {name: MENGE, description: Quantity of this history entry, data_type: "QUAN(13,3)"}
+  - {name: DMBTR, description: Amount in local currency, data_type: "CURR(13,2)"}
+  - {name: CPUDT, description: Entry date (system), data_type: "DATS(8)"}
+  - {name: CPUTM, description: Entry time (system), data_type: "TIMS(6)"}
+join_keys:
+  - {field: EBELN, target_table: EKPO, target_field: EBELN, cardinality: many_to_one}
+  - {field: BELNR, target_table: MKPF, target_field: MBLNR, cardinality: many_to_one, notes: "valid only when VGABE=1 (goods receipt) — also requires GJAHR=MKPF.MJAHR"}
+  - {field: BELNR, target_table: RBKP, target_field: BELNR, cardinality: many_to_one, notes: "valid only when VGABE=2 (invoice receipt) — also requires GJAHR=RBKP.GJAHR"}
+typical_role:
+  - "'Record Goods Receipt' activity (VGABE=1)"
+  - "'Record Invoice Receipt' activity (VGABE=2)"
+  - "3-way-match reconciliation analysis (GR quantity/amount vs IR quantity/amount per item)"
+gotchas:
+  - "BELNR is polymorphic: which table it points to depends entirely on VGABE. Joining BELNR to MKPF for an invoice-receipt row (VGABE=2) silently returns nothing or, worse, a coincidentally matching but wrong document if number ranges overlap — always filter on VGABE first."
+  - "CPUDT/CPUTM is the reliable system timestamp; BUDAT is a business/posting date that can be backdated by the user and is not safe for activity ordering on its own."
+  - "One PO item can have many EKBE rows for the same VGABE (partial/multiple goods receipts) — do not assume the first row is the only relevant event."
+timestamp_fields:
+  - {date_field: BUDAT, granularity: date_only, notes: "business posting date, user-editable, not reliable alone for ordering"}
+  - {date_field: CPUDT, time_field: CPUTM, granularity: date_and_time, notes: "system entry timestamp — preferred for activity ordering"}

@@ -1,0 +1,30 @@
+name: BSEG
+module: FI
+description: >
+  Accounting document line item — the actual debit/credit postings,
+  including vendor open-item and clearing (payment) information.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: BUKRS, description: Company code, data_type: "CHAR(4)", is_key: true}
+  - {name: BELNR, description: Accounting document number, data_type: "CHAR(10)", is_key: true}
+  - {name: GJAHR, description: Fiscal year, data_type: "NUMC(4)", is_key: true}
+  - {name: BUZEI, description: Line item number, data_type: "NUMC(3)", is_key: true}
+  - {name: KOART, description: "Account type: K=vendor, S=GL account, M=material", data_type: "CHAR(1)"}
+  - {name: LIFNR, description: Vendor account number (populated when KOART=K), data_type: "CHAR(10)"}
+  - {name: DMBTR, description: Amount in local currency, data_type: "CURR(13,2)"}
+  - {name: SHKZG, description: Debit/credit indicator, data_type: "CHAR(1)"}
+  - {name: ZFBDT, description: Baseline date for payment terms, data_type: "DATS(8)"}
+  - {name: AUGDT, description: Clearing (payment) date, data_type: "DATS(8)"}
+  - {name: AUGBL, description: Clearing document number, data_type: "CHAR(10)"}
+join_keys:
+  - {field: BELNR, target_table: BKPF, target_field: BELNR, cardinality: many_to_one, notes: "must also match BUKRS+GJAHR"}
+  - {field: LIFNR, target_table: LFA1, target_field: LIFNR, cardinality: many_to_one}
+typical_role:
+  - "'Clear Vendor Invoice' / 'Pay Vendor' activity, via AUGDT/AUGBL"
+  - "Payment-term-adherence analysis (AUGDT vs ZFBDT + payment terms)"
+gotchas:
+  - "AUGDT and AUGBL are NULL until the item is actually cleared — querying for a 'payment' activity too early in the process will correctly show no event yet; do not treat NULL as missing/broken data."
+  - "One accounting document routinely has several BSEG lines (vendor line + tax line + GL offset) — deriving one activity per BKPF header, not per BSEG line, avoids inflating the event count."
+timestamp_fields:
+  - {date_field: ZFBDT, granularity: date_only}
+  - {date_field: AUGDT, granularity: date_only, notes: "null until cleared"}

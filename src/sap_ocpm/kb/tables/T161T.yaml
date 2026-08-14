@@ -1,0 +1,14 @@
+name: T161T
+module: MM-PUR
+description: Purchasing document type text lookup (BSART description).
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: BSART, description: Purchasing document type, data_type: "CHAR(4)", is_key: true}
+  - {name: SPRAS, description: Language key, data_type: "LANG(1)", is_key: true}
+  - {name: BATXT, description: Description, data_type: "CHAR(20)"}
+join_keys: []
+typical_role:
+  - "Pure lookup for EKKO.BSART / EBAN.BSART"
+gotchas:
+  - "Filter SPRAS, same as every other *T text table in this KB."
+timestamp_fields: []

@@ -1,0 +1,23 @@
+name: RSEG
+module: MM-IV
+description: Incoming invoice document item — the line linking an invoice back to the PO item it settles.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: BELNR, description: Invoice document number, data_type: "CHAR(10)", is_key: true}
+  - {name: GJAHR, description: Fiscal year, data_type: "NUMC(4)", is_key: true}
+  - {name: BUZEI, description: Item number, data_type: "NUMC(6)", is_key: true}
+  - {name: EBELN, description: Purchase order reference, data_type: "CHAR(10)"}
+  - {name: EBELP, description: Purchase order item reference, data_type: "NUMC(5)"}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)"}
+  - {name: WRBTR, description: Amount in document currency, data_type: "CURR(13,2)"}
+  - {name: MENGE, description: Invoiced quantity, data_type: "QUAN(13,3)"}
+  - {name: WERKS, description: Plant, data_type: "CHAR(4)"}
+  - {name: BUKRS, description: Company code, data_type: "CHAR(4)"}
+join_keys:
+  - {field: BELNR, target_table: RBKP, target_field: BELNR, cardinality: many_to_one, notes: "must also match GJAHR"}
+  - {field: EBELN, target_table: EKPO, target_field: EBELN, cardinality: many_to_one}
+typical_role:
+  - "3-way-match line: compare RSEG.MENGE/WRBTR against the goods receipt and PO quantities/prices for that same EBELN+EBELP"
+gotchas:
+  - "An invoice can reference an EBELP that never received a physical goods receipt in a 2-way-match / consignment scenario (EKPO.WEBRE=false) — that is a legitimate flow, not a data quality problem, so don't flag every GR-less invoice as an exception without first checking the item's match type."
+timestamp_fields: []

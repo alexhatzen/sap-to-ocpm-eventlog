@@ -1,0 +1,18 @@
+name: MARA
+module: MM
+description: Material master, client-independent general data. Master/reference data, not a process/activity source.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: MATNR, description: Material number, data_type: "CHAR(18)", is_key: true}
+  - {name: MTART, description: Material type, data_type: "CHAR(4)"}
+  - {name: MATKL, description: Material group, data_type: "CHAR(9)"}
+  - {name: MEINS, description: Base unit of measure, data_type: "UNIT(3)"}
+  - {name: ERSDA, description: Creation date, data_type: "DATS(8)"}
+  - {name: LVORM, description: Deletion flag (cross-client), data_type: "CHAR(1)"}
+join_keys: []
+typical_role:
+  - "Material-group / material-type dimension for segmenting the event log, not an activity source"
+gotchas:
+  - "LVORM='X' means flagged for deletion, not actually gone — historical POs against a deleted material are still valid process history."
+timestamp_fields:
+  - {date_field: ERSDA, granularity: date_only}

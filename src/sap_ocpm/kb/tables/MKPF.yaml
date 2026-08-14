@@ -1,0 +1,23 @@
+name: MKPF
+module: MM-IM
+description: >
+  Material document header. One row per goods movement posting
+  (goods receipt, goods issue, transfer, ...). Carries the reliable
+  system timestamp that EKBE's BUDAT alone cannot give you.
+key_fields:
+  - {name: MANDT, description: Client, data_type: "CLNT(3)"}
+  - {name: MBLNR, description: Material document number, data_type: "CHAR(10)", is_key: true}
+  - {name: MJAHR, description: Material document year, data_type: "NUMC(4)", is_key: true}
+  - {name: BLDAT, description: Document date, data_type: "DATS(8)"}
+  - {name: BUDAT, description: Posting date, data_type: "DATS(8)"}
+  - {name: CPUDT, description: Entry date (system), data_type: "DATS(8)"}
+  - {name: CPUTM, description: Entry time (system), data_type: "TIMS(6)"}
+  - {name: USNAM, description: Entered-by user, data_type: "CHAR(12)"}
+join_keys: []
+typical_role:
+  - "'Record Goods Receipt' / 'Record Goods Issue' activity timestamp source, joined via EKBE.BELNR (VGABE=1) or directly via MSEG.MBLNR"
+gotchas:
+  - "MBLNR is only unique together with MJAHR — number ranges wrap and reuse MBLNR across fiscal years. Any join on MBLNR alone without also matching year is a latent hallucinated-join bug, not a real one."
+timestamp_fields:
+  - {date_field: BUDAT, granularity: date_only}
+  - {date_field: CPUDT, time_field: CPUTM, granularity: date_and_time, notes: "preferred for activity ordering"}
