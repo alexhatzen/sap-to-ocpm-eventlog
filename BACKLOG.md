@@ -26,22 +26,33 @@ output — see `README.md` once written, or the original planning conversation).
 
 ## Next up (in build order)
 
-### 3. Deterministic tools (`src/sap_ocpm/tools/`)
-- [ ] `search_tables.py` — keyword/module search over the KB (plain
-      substring/keyword match is enough at 30 tables; note in README that
-      this is the first thing to upgrade at scale).
-- [ ] `get_table_schema.py` — thin wrapper over `kb.loader`.
-- [ ] `find_join_path.py` — build a `networkx` graph from every table's
-      `join_keys` edges, shortest-path between two tables, return the
-      literal chain or an explicit "no declared path" result (must NOT
-      guess a path across polymorphic-key tables like CDHDR/JEST/NAST —
-      those correctly have no outward edges).
-- [ ] `validate_sql.py` — `sqlglot` parse + dialect check.
-- [ ] `check_event_log_spec.py` — structural validation of an OCEL
-      spec/output (object types declared, timestamps ISO-parseable, no
-      dangling object references).
-- [ ] Unit tests: known-good join chains (EKPO→EKBE→RBKP, EKPO→EKBE→MKPF),
-      no-path case for CDHDR, SQL validate accept/reject cases.
+### 3. Deterministic tools (`src/sap_ocpm/tools/`) — ✅ done
+- [x] `search_tables.py` — keyword/module search over the KB (plain
+      substring/keyword match, cached KB load via `tools/_shared.py`).
+- [x] `get_table_schema.py` — KB lookup, explicit `found=False` + error
+      message (not a silent `None`) for undeclared tables.
+- [x] `find_join_path.py` — `networkx` `MultiGraph` over every table's
+      `join_keys` edges, shortest-path between two tables, returns the
+      literal join chain (field-level, cardinality included) or an
+      explicit "no declared path" result. Verified CDHDR→EKKO correctly
+      returns no path instead of guessing across the polymorphic key.
+- [x] `validate_sql.py` — `sqlglot` parse + statement-type check.
+      Two things learned building this, documented in the module
+      docstring: sqlglot has no native SAP HANA dialect (default is
+      generic/ANSI, not a fabricated "hana"), and `sqlglot.parse()` is
+      permissive enough to silently reinterpret a typo'd keyword
+      ("SELEKT * FRM EKKO") as a legal arithmetic expression instead of
+      raising — caught by additionally requiring the parsed result be a
+      real `exp.Query`/`DDL`/`DML` statement.
+- [x] `check_event_log_spec.py` — structural validation of an OCEL-shaped
+      spec (own minimal `EventLogSpec`/`OcelObject`/`OcelEvent` pydantic
+      models pending the real constructor): declared object/event types,
+      ISO-8601 timestamps, no dangling object references, duplicate-id
+      detection, zero-event warning.
+- [x] Unit tests (`tests/unit/test_tools.py`, 20 passing): hallucinated
+      table canary, case-insensitivity, known join chains, no-path for
+      CDHDR, malformed SQL, dangling event-log references, bad
+      timestamps, typed vs dict input.
 
 ### 4. Data prep (`src/sap_ocpm/dataprep/`)
 - [ ] `download_bpi2019.py` — pull the ~38MB CSV export from
